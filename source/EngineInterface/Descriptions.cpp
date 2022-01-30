@@ -5,48 +5,6 @@
 #include "Base/Math.h"
 #include "Base/Physics.h"
 
-#include "ChangeDescriptions.h"
-
-namespace
-{
-    boost::optional<std::list<ConnectionDescription>> convert(
-        boost::optional<std::list<ConnectionChangeDescription>> const& connections)
-    {
-        if (!connections) {
-            return boost::none;
-        }
-        std::list<ConnectionDescription> result;
-        for (auto const& connectionChange : *connections) {
-            ConnectionDescription connection;
-            connection.cellId = connectionChange.cellId;
-            connection.distance = connectionChange.distance;
-            connection.angleFromPrevious = connectionChange.angleFromPrevious;
-            result.emplace_back(connection);
-        }
-        return result;
-    }
-
-}
-
-CellDescription::CellDescription(CellChangeDescription const& change)
-{
-    id = change.id;
-    pos = *static_cast<boost::optional<RealVector2D>>(change.pos);
-    energy = *static_cast<boost::optional<double>>(change.energy);
-    maxConnections = *static_cast<boost::optional<int>>(change.maxConnections);
-
-    std::list<ConnectionDescription> connectionList =
-        *convert(static_cast<boost::optional<std::list<ConnectionChangeDescription>>>(change.connectingCells));
-    connections = std::vector<ConnectionDescription>(connectionList.begin(), connectionList.end());
-    tokenBlocked = *change.tokenBlocked.getOptionalValue();  //static_cast<boost::optional<bool>> doesn't work for some reason
-    tokenBranchNumber = *static_cast<boost::optional<int>>(change.tokenBranchNumber);
-    metadata = *static_cast<boost::optional<CellMetadata>>(change.metadata);
-    cellFeature =
-        *static_cast<boost::optional<CellFeatureDescription>>(change.cellFeatures);
-    tokens = *static_cast<boost::optional<vector<TokenDescription>>>(change.tokens);
-    tokenUsages = *static_cast<boost::optional<int>>(change.tokenUsages);
-}
-
 CellDescription& CellDescription::addToken(TokenDescription const& value)
 {
     tokens.emplace_back(value);
@@ -74,10 +32,176 @@ bool CellDescription::isConnectedTo(uint64_t id) const
         != connections.end();
 }
 
-ClusterDescription& ClusterDescription::addConnection(
-    uint64_t const& cellId1,
-    uint64_t const& cellId2,
-    std::unordered_map<uint64_t, int>& cache)
+RealVector2D ClusterDescription::getClusterPosFromCells() const
+{
+    RealVector2D result;
+    for (auto const& cell : cells) {
+        result += cell.pos;
+    }
+    result /= cells.size();
+    return result;
+}
+
+void ClusteredDataDescription::setCenter(RealVector2D const& center)
+{
+    auto origCenter = calcCenter();
+    auto delta = center - origCenter;
+    shift(delta);
+}
+
+RealVector2D ClusteredDataDescription::calcCenter() const
+{
+    RealVector2D result;
+    int numEntities = 0;
+    for (auto const& cluster : clusters) {
+        for (auto const& cell : cluster.cells) {
+            result += cell.pos;
+            ++numEntities;
+        }
+    }
+    for (auto const& particle : particles) {
+        result += particle.pos;
+        ++numEntities;
+    }
+    result /= numEntities;
+    return result;
+}
+
+void ClusteredDataDescription::shift(RealVector2D const& delta)
+{
+    for (auto& cluster : clusters) {
+        for (auto& cell : cluster.cells) {
+            cell.pos += delta;
+        }
+    }
+    for (auto& particle : particles) {
+        particle.pos += delta;
+    }
+}
+
+DataDescription::DataDescription(ClusteredDataDescription const& clusteredData)
+{
+    for (auto const& cluster : clusteredData.clusters) {
+        addCells(cluster.cells);
+    }
+    particles = clusteredData.particles;
+}
+
+DataDescription& DataDescription::add(DataDescription const& other)
+{
+    cells.insert(cells.end(), other.cells.begin(), other.cells.end());
+    particles.insert(particles.end(), other.particles.begin(), other.particles.end());
+    return *this;
+}
+
+DataDescription& DataDescription::addCells(std::vector<CellDescription> const& value)
+{
+    cells.insert(cells.end(), value.begin(), value.end());
+    return *this;
+}
+
+DataDescription& DataDescription::addCell(CellDescription const& value)
+{
+    addCells({value});
+    return *this;
+}
+
+DataDescription& DataDescription::addParticles(std::vector<ParticleDescription> const& value)
+{
+    particles.insert(particles.end(), value.begin(), value.end());
+    return *this;
+}
+
+DataDescription& DataDescription::addParticle(ParticleDescription const& value)
+{
+    addParticles({value});
+    return *this;
+}
+
+void DataDescription::clear()
+{
+    cells.clear();
+    particles.clear();
+}
+
+bool DataDescription::isEmpty() const
+{
+    if (!cells.empty()) {
+        return false;
+    }
+    if (!particles.empty()) {
+        return false;
+    }
+    return true;
+}
+
+void DataDescription::setCenter(RealVector2D const& center)
+{
+    auto origCenter = calcCenter();
+    auto delta = center - origCenter;
+    shift(delta);
+}
+
+RealVector2D DataDescription::calcCenter() const
+{
+    RealVector2D result;
+    auto numEntities = cells.size() + particles.size();
+    for (auto const& cell : cells) {
+        result += cell.pos;
+    }
+    for (auto const& particle : particles) {
+        result += particle.pos;
+    }
+    result /= numEntities;
+    return result;
+}
+
+void DataDescription::shift(RealVector2D const& delta)
+{
+    for (auto& cell : cells) {
+        cell.pos += delta;
+    }
+    for (auto& particle : particles) {
+        particle.pos += delta;
+    }
+}
+
+void DataDescription::rotate(float angle)
+{
+    auto rotationMatrix = Math::calcRotationMatrix(angle);
+    auto center = calcCenter();
+
+    auto rotate = [&](RealVector2D& pos) {
+        auto relPos = pos - center;
+        auto rotatedRelPos = rotationMatrix * relPos;
+        pos = center + rotatedRelPos;
+    };
+    for (auto& cell : cells) {
+        rotate(cell.pos);
+    }
+    for (auto& particle : particles) {
+        rotate(particle.pos);
+    }
+}
+
+void DataDescription::accelerate(RealVector2D const& velDelta, float angularVelDelta)
+{
+    auto center = calcCenter();
+
+    auto accelerate = [&](RealVector2D const& pos, RealVector2D& vel) {
+        auto relPos = pos - center;
+        vel += Physics::tangentialVelocity(relPos, velDelta, angularVelDelta);
+    };
+    for (auto& cell : cells) {
+        accelerate(cell.pos, cell.vel);
+    }
+    for (auto& particle : particles) {
+        accelerate(particle.pos, particle.vel);
+    }
+}
+
+DataDescription&
+DataDescription::addConnection(uint64_t const& cellId1, uint64_t const& cellId2, std::unordered_map<uint64_t, int>& cache)
 {
     auto& cell1 = getCellRef(cellId1, cache);
     auto& cell2 = getCellRef(cellId2, cache);
@@ -122,8 +246,7 @@ ClusterDescription& ClusterDescription::addConnection(
         while (true) {
             auto nextAngle = angle + connectionIt->angleFromPrevious;
 
-            if ((angle < newAngle && newAngle <= nextAngle)
-                || (angle < (newAngle + 360.0f) && (newAngle + 360.0f) <= nextAngle)) {
+            if ((angle < newAngle && newAngle <= nextAngle) || (angle < (newAngle + 360.0f) && (newAngle + 360.0f) <= nextAngle)) {
                 break;
             }
 
@@ -163,17 +286,7 @@ ClusterDescription& ClusterDescription::addConnection(
     return *this;
 }
 
-RealVector2D ClusterDescription::getClusterPosFromCells() const
-{
-    RealVector2D result;
-    for (auto const& cell : cells) {
-        result += cell.pos;
-    }
-    result /= cells.size();
-    return result;
-}
-
-CellDescription& ClusterDescription::getCellRef(uint64_t const& cellId, std::unordered_map<uint64_t, int>& cache)
+CellDescription& DataDescription::getCellRef(uint64_t const& cellId, std::unordered_map<uint64_t, int>& cache)
 {
     auto findResult = cache.find(cellId);
     if (findResult != cache.end()) {
@@ -187,43 +300,4 @@ CellDescription& ClusterDescription::getCellRef(uint64_t const& cellId, std::uno
         }
     }
     THROW_NOT_IMPLEMENTED();
-}
-
-ParticleDescription::ParticleDescription(ParticleChangeDescription const& change)
-{
-    id = change.id;
-    pos = *static_cast<boost::optional<RealVector2D>>(change.pos);
-    vel = *static_cast<boost::optional<RealVector2D>>(change.vel);
-    energy = *static_cast<boost::optional<double>>(change.energy);
-    metadata = *static_cast<boost::optional<ParticleMetadata>>(change.metadata);
-}
-
-RealVector2D DataDescription::calcCenter() const
-{
-    RealVector2D result;
-    int numEntities = 0;
-    for (auto const& cluster : clusters) {
-        for (auto const& cell : cluster.cells) {
-            result += cell.pos;
-            ++numEntities;
-        }
-    }
-    for (auto const& particle : particles) {
-        result += particle.pos;
-        ++numEntities;
-    }
-    result /= numEntities;
-    return result;
-}
-
-void DataDescription::shift(RealVector2D const& delta)
-{
-    for (auto& cluster : clusters) {
-        for (auto& cell : cluster.cells) {
-            cell.pos += delta;
-        }
-    }
-    for (auto& particle : particles) {
-        particle.pos += delta;
-    }
 }

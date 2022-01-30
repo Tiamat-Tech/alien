@@ -4,7 +4,7 @@
 
 #include "Base.cuh"
 #include "Definitions.cuh"
-#include "DynamicMemory.cuh"
+#include "TempMemory.cuh"
 
 struct Entities
 {
@@ -16,29 +16,19 @@ struct Entities
     Array<Token> tokens;
     Array<Particle> particles;
 
-    DynamicMemory strings;
+    TempMemory dynamicMemory;
 
-    void init()
-    {
-        cellPointers.init();
-        cells.init();
-        tokenPointers.init();
-        tokens.init();
-        particles.init();
-        particlePointers.init();
-        strings.init();
-        strings.resize(Const::MetadataMemorySize);
-    }
+    void init();
+    void free();
 
-    void free()
+    __device__ __inline__ void saveNumEntries()
     {
-        cellPointers.free();
-        cells.free();
-        tokenPointers.free();
-        tokens.free();
-        particles.free();
-        particlePointers.free();
-        strings.free();
+        cellPointers.saveNumEntries();
+        tokenPointers.saveNumEntries();
+        particlePointers.saveNumEntries();
+        cells.saveNumEntries();
+        tokens.saveNumEntries();
+        particles.saveNumEntries();
     }
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <map>
 #include <set>
 #include <list>
@@ -7,28 +8,15 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <optional>
+#include <memory>
 
-#include <boost/make_shared.hpp>
-#include <boost/optional.hpp>
-#include <boost/shared_ptr.hpp>
-
-#include "DllExport.h"
 #include "Exceptions.h"
 
-using boost::optional;
-using boost::shared_ptr;
 using std::int32_t;
 using std::int64_t;
-using std::list;
-using std::map;
-using std::pair;
-using std::set;
-using std::string;
 using std::uint32_t;
 using std::uint64_t;
-using std::unordered_map;
-using std::unordered_set;
-using std::vector;
 
 const double FLOATINGPOINT_HIGH_PRECISION = 1.0e-7;
 const double FLOATINGPOINT_MEDIUM_PRECISION = 1.0e-4;
@@ -61,7 +49,7 @@ inline int toInt(T const& value)
         return *this; \
     }
 
-struct BASE_EXPORT IntVector2D
+struct IntVector2D
 {
     int x = 0;
     int y = 0;
@@ -72,7 +60,7 @@ struct BASE_EXPORT IntVector2D
     void operator-=(IntVector2D const& vec);
 };
 
-struct BASE_EXPORT RealVector2D
+struct RealVector2D
 {
     float x = 0.0f;
     float y = 0.0f;
@@ -105,6 +93,8 @@ struct BASE_EXPORT RealVector2D
     RealVector2D operator-(RealVector2D const& other) const;
     RealVector2D operator/(float divisor) const;
 };
+
+using RealMatrix2D = std::array<std::array<float, 2>, 2>;
 
 struct RealRect
 {

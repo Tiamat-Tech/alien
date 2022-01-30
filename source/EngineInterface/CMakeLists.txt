@@ -1,21 +1,20 @@
 
 add_library(alien_engine_interface_lib
     ShallowUpdateSelectionData.h
-    ChangeDescriptions.cpp
-    ChangeDescriptions.h
+    CellComputationCompiler.cpp
+    CellComputationCompiler.h
+    CellInstruction.h
     Colors.h
     Definitions.h
     DescriptionHelper.cpp
     DescriptionHelper.h
     Descriptions.cpp
     Descriptions.h
-    DllExport.h
-    ElementaryTypes.h
-    #EngineInterfaceSettings.cpp
-    #EngineInterfaceSettings.h
+    Enums.h
     FlowFieldSettings.h
     GeneralSettings.h
     GpuSettings.h
+    InspectedEntityIds.h
     Metadata.h
     OverallStatistics.h
     OverlayDescriptions.h
@@ -25,11 +24,13 @@ add_library(alien_engine_interface_lib
     Serializer.cpp
     Serializer.h
     Settings.h
+    SimulationController.h
     SimulationParameters.h
     SimulationParametersSpots.h
     SimulationParametersSpotValues.h
     SpaceCalculator.cpp
     SpaceCalculator.h
+    SymbolMap.cpp
     SymbolMap.h
     ZoomLevels.h)
 

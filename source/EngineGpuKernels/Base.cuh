@@ -14,17 +14,20 @@
 #include "HashSet.cuh"
 #include "Swap.cuh"
 
-__device__ inline float toFloat(int value)
+template<typename T>
+__device__ inline float toFloat(T value)
 {
     return static_cast<float>(value);
 }
 
-__device__ inline int toInt(float value)
+template <typename T>
+__device__ inline int toInt(T value)
 {
     return static_cast<int>(value);
 }
 
-__device__ inline uint64_t toUInt64(float value)
+template <typename T>
+__device__ inline uint64_t toUInt64(T value)
 {
     return static_cast<uint64_t>(value);
 }
@@ -168,52 +171,31 @@ isContainedInRect(int2 const& rectUpperLeft, int2 const& rectLowerRight, int2 co
 }
 
 template <typename T>
-__device__ __inline__ T* atomicExch(T** address, T* value)
+__device__ __inline__ T* alienAtomicExch(T** address, T* value)
 {
+    static_assert(sizeof(unsigned long long) == sizeof(T*));
     return reinterpret_cast<T*>(atomicExch(
         reinterpret_cast<unsigned long long int*>(address), reinterpret_cast<unsigned long long int>(value)));
 }
 
 template <typename T>
-__device__ __inline__ T atomicRead(T* const& address)
+__device__ __inline__ T alienAtomicRead(T* const& address)
 {
     return atomicAdd(address, 0);
         
 }
 
-/*
-template<typename T>
-__device__ __inline__  T* atomicExch_block(T** address, T* value)
+template <typename T>
+__device__ __inline__ void alienAtomicAdd(T* address, T const& value)
 {
-    return reinterpret_cast<T*>(atomicExch_block(reinterpret_cast<unsigned long long int*>(address),
-        reinterpret_cast<unsigned long long int>(value)));
+    // CUDA headers use "unsigned long long" for 64bit types, which
+    // may not be struturally equivalent to std::uint64_t
+    //
+    // Due to this, we need an ugly type casting workaround here
+    //
+    static_assert(sizeof(unsigned long long) == sizeof(T));
+    atomicAdd(reinterpret_cast<unsigned long long*>(address), value);
 }
-*/
-
-class BlockLock
-{
-public:
-    __device__ __inline__ void init_block()
-    {
-        if (0 == threadIdx.x) {
-            lock = 0;
-        }
-        __syncthreads();
-    }
-
-    __device__ __inline__ void getLock()
-    {
-        while (1 == atomicExch_block(&lock, 1)) {
-        }
-    }
-
-    __device__ __inline__ bool tryLock() { return 0 == atomicExch_block(&lock, 1); }
-
-    __device__ __inline__ void releaseLock() { atomicExch_block(&lock, 0); }
-
-private:
-    int lock;  //0 = unlocked, 1 = locked
-};
 
 class SystemLock
 {
@@ -259,12 +241,6 @@ public:
         return true;
     }
 
-    __device__ __inline__ void getLock()
-    {
-        while (!tryLock()) {
-        };
-    }
-
     __device__ __inline__ bool isLocked() { return _lockState1 == 0 && _lockState2 == 0; }
 
     __device__ __inline__ void releaseLock()
@@ -284,7 +260,38 @@ private:
     int _lockState2;
 };
 
-float random(float max)
+inline float random(float max)
 {
     return ((float)rand() / RAND_MAX) * max;
+}
+
+template <typename T>
+inline T copyToHost(T* source)
+{
+    T result;
+    CHECK_FOR_CUDA_ERROR(cudaMemcpy(&result, source, sizeof(T), cudaMemcpyDeviceToHost));
+    return result;
+}
+
+template <typename T>
+inline void copyToHost(T* target, T* source, int count = 1)
+{
+    CHECK_FOR_CUDA_ERROR(cudaMemcpy(target, source, sizeof(T) * count, cudaMemcpyDeviceToHost));
+}
+
+template <typename T>
+inline void copyToDevice(T* target, T* source, int count = 1)
+{
+    CHECK_FOR_CUDA_ERROR(cudaMemcpy(target, source, sizeof(T) * count, cudaMemcpyHostToDevice));
+}
+
+template <typename T>
+void setValueToDevice(T* target, T const& value)
+{
+    CHECK_FOR_CUDA_ERROR(cudaMemcpy(target, &value, sizeof(T), cudaMemcpyHostToDevice));
+}
+
+__device__ __inline__ int calcMod(char value, int count)
+{
+    return static_cast<unsigned char>(value) % count;
 }

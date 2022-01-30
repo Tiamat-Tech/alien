@@ -18,7 +18,7 @@ public:
     __inline__ __device__ static void angleCorrection(int& angle);
     __inline__ __device__ static void rotateQuarterClockwise(float2& v);
     __inline__ __device__ static void rotateQuarterCounterClockwise(float2& v);
-    __inline__ __device__ static float angleOfVector(float2 const& v);   //0 DEG corresponds to (0,-1)
+    __inline__ __device__ static float angleOfVector(float2 const& v);  //0 DEG corresponds to (0,-1)
     __inline__ __device__ static float2 unitVectorOfAngle(float angle);
     __inline__ __device__ static void normalize(float2& vec);
     __inline__ __device__ static float2 normalized(float2 vec);
@@ -29,9 +29,7 @@ public:
     __inline__ __host__ __device__ static float lengthSquared(float2 const& v);
     __inline__ __device__ static float2 rotateClockwise(float2 const& v, float angle);
     __inline__ __device__ static float subtractAngle(float angleMinuend, float angleSubtrahend);
-    __inline__ __device__ static float
-    calcDistanceToLineSegment(float2 const& startSegment, float2 const& endSegment, float2 const& pos, int const& boundary = 0);
-
+    __inline__ __device__ static float calcDistanceToLineSegment(float2 const& startSegment, float2 const& endSegment, float2 const& pos, float boundary = 0);
     __inline__ __device__ static float alignAngle(float angle, int alignment);
 };
 
@@ -82,7 +80,7 @@ __inline__ __device__ bool operator==(int2 const& p, int2 const& q)
 __inline__ __device__ float2 Math::unitVectorOfAngle(float angle)
 {
     angle *= DEG_TO_RAD;
-    return{ sinf(angle), -cos(angle) };
+    return{ sinf(angle), -cosf(angle) };
 }
 
 __inline__ __device__ float Math::angleOfVector(float2 const & v)
@@ -216,12 +214,12 @@ __inline__ __device__ float Math::subtractAngle(float angleMinuend, float angleS
 }
 
 __inline__ __device__ float
-Math::calcDistanceToLineSegment(float2 const& startSegment, float2 const& endSegment, float2 const& pos, int const& boundary)
+Math::calcDistanceToLineSegment(float2 const& startSegment, float2 const& endSegment, float2 const& pos, float boundary)
 {
     auto const relPos = pos - startSegment;
     auto segmentDirection = endSegment - startSegment;
     if (length(segmentDirection) < FP_PRECISION) {
-        return boundary + 1;
+        return boundary + 1.0f;
     }
 
     auto const segmentLength = length(segmentDirection);
@@ -230,12 +228,12 @@ Math::calcDistanceToLineSegment(float2 const& startSegment, float2 const& endSeg
     rotateQuarterCounterClockwise(normal);
     auto const signedDistanceFromLine = dot(relPos, normal);
     if (abs(signedDistanceFromLine) > boundary) {
-        return boundary + 1;
+        return boundary + 1.0f;
     }
 
     auto const signedDistanceFromStart = dot(relPos, segmentDirection);
     if (signedDistanceFromStart < 0 || signedDistanceFromStart > segmentLength) {
-        return boundary + 1;
+        return boundary + 1.0f;
     }
 
     return abs(signedDistanceFromLine);

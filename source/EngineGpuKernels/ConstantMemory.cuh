@@ -5,8 +5,7 @@
 #include "EngineInterface/SimulationParametersSpots.h"
 #include "EngineInterface/GpuSettings.h"
 
-__constant__ __device__ GpuSettings gpuConstants;
-__constant__ __device__ SimulationParameters cudaSimulationParameters;
-__constant__ __device__ SimulationParametersSpots cudaSimulationParametersSpots;
-__constant__ __device__ FlowFieldSettings cudaFlowFieldSettings;
-__constant__ __device__ int cudaImageBlurFactors[7];
+__constant__ extern GpuSettings cudaThreadSettings;
+__constant__ extern SimulationParameters cudaSimulationParameters;
+__constant__ extern SimulationParametersSpots cudaSimulationParametersSpots;
+__constant__ extern FlowFieldSettings cudaFlowFieldSettings;

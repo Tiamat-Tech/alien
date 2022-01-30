@@ -1,21 +1,22 @@
 #pragma once
 
+#include <variant>
+
 #include "Base/Definitions.h"
 
 #include "Definitions.h"
 #include "Metadata.h"
-#include "DllExport.h"
 
 struct CellFeatureDescription
 {
 	std::string volatileData;
     std::string constData;
 
-    Enums::CellFunction::Type getType() const
+    Enums::CellFunction getType() const
     {
-        return static_cast<Enums::CellFunction::Type>(static_cast<unsigned char>(_type) % Enums::CellFunction::_COUNTER);
+        return _type % Enums::CellFunction_Count;
     }
-	CellFeatureDescription& setType(Enums::CellFunction::Type value) { _type = value; return *this; }
+	CellFeatureDescription& setType(Enums::CellFunction value) { _type = value; return *this; }
     CellFeatureDescription& setVolatileData(std::string const& value)
     {
         volatileData = value;
@@ -34,13 +35,16 @@ struct CellFeatureDescription
 	bool operator!=(CellFeatureDescription const& other) const { return !operator==(other); }
 
 private:
-    Enums::CellFunction::Type _type = Enums::CellFunction::COMPUTER;
+    Enums::CellFunction _type = Enums::CellFunction_Computation;
 };
 
 struct TokenDescription
 {
     double energy = 0;
     std::string data;
+
+    //only for temporary use
+    int sequenceNumber = 0;
 
     TokenDescription& setEnergy(double value)
     {
@@ -52,13 +56,21 @@ struct TokenDescription
         data = value;
         return *this;
     }
-    bool operator==(TokenDescription const& other) const { return energy == other.energy && data == other.data; }
+    TokenDescription& setSequenceNumber(int value)
+    {
+        sequenceNumber = value;
+        return *this;
+    }
+    bool operator==(TokenDescription const& other) const
+    {
+        return energy == other.energy && data == other.data && sequenceNumber == other.sequenceNumber;
+    }
     bool operator!=(TokenDescription const& other) const { return !operator==(other); }
 };
 
 struct ConnectionDescription
 {
-    uint64_t cellId;
+    uint64_t cellId;    //value of 0 means cell not present in DataDescription
     float distance = 0;
     float angleFromPrevious = 0;
 };
@@ -69,7 +81,7 @@ struct CellDescription
 
     RealVector2D pos;
     RealVector2D vel;
-    double energy;
+    double energy; 
     int maxConnections;
     std::vector<ConnectionDescription> connections;
     bool tokenBlocked;
@@ -79,8 +91,7 @@ struct CellDescription
     std::vector<TokenDescription> tokens;
     int tokenUsages;
 
-    ENGINEINTERFACE_EXPORT CellDescription() = default;
-    ENGINEINTERFACE_EXPORT CellDescription(CellChangeDescription const& change);
+    CellDescription() = default;
     CellDescription& setId(uint64_t value)
     {
         id = value;
@@ -131,20 +142,20 @@ struct CellDescription
         cellFeature = value;
         return *this;
     }
-    CellDescription& setTokens(vector<TokenDescription> const& value)
+    CellDescription& setTokens(std::vector<TokenDescription> const& value)
     {
         tokens = value;
         return *this;
     }
-    ENGINEINTERFACE_EXPORT CellDescription& addToken(TokenDescription const& value);
-    ENGINEINTERFACE_EXPORT CellDescription& addToken(int index, TokenDescription const& value);
-    ENGINEINTERFACE_EXPORT CellDescription& delToken(int index);
+    CellDescription& addToken(TokenDescription const& value);
+    CellDescription& addToken(int index, TokenDescription const& value);
+    CellDescription& delToken(int index);
     CellDescription& setTokenUsages(int value)
     {
         tokenUsages = value;
         return *this;
     }
-    ENGINEINTERFACE_EXPORT bool isConnectedTo(uint64_t id) const;
+    bool isConnectedTo(uint64_t id) const;
 };
 
 struct ClusterDescription
@@ -153,7 +164,7 @@ struct ClusterDescription
 
     std::vector<CellDescription> cells;
 
-    ENGINEINTERFACE_EXPORT ClusterDescription() = default;
+    ClusterDescription() = default;
 
     ClusterDescription& setId(uint64_t value)
     {
@@ -171,13 +182,7 @@ struct ClusterDescription
         return *this;
     }
 
-    ENGINEINTERFACE_EXPORT ClusterDescription&
-    addConnection(uint64_t const& cellId1, uint64_t const& cellId2, std::unordered_map<uint64_t, int>& cache);
-
-    ENGINEINTERFACE_EXPORT RealVector2D getClusterPosFromCells() const;
-
-private:
-    CellDescription& getCellRef(uint64_t const& cellId, std::unordered_map<uint64_t, int>& cache);
+    RealVector2D getClusterPosFromCells() const;
 };
 
 struct ParticleDescription
@@ -189,8 +194,7 @@ struct ParticleDescription
     double energy;
     ParticleMetadata metadata;
 
-    ENGINEINTERFACE_EXPORT ParticleDescription() = default;
-    ENGINEINTERFACE_EXPORT ParticleDescription(ParticleChangeDescription const& change);
+    ParticleDescription() = default;
     ParticleDescription& setId(uint64_t value)
     {
         id = value;
@@ -218,29 +222,29 @@ struct ParticleDescription
     }
 };
 
-struct DataDescription
+struct ClusteredDataDescription
 {
-    vector<ClusterDescription> clusters;
-    vector<ParticleDescription> particles;
+    std::vector<ClusterDescription> clusters;
+    std::vector<ParticleDescription> particles;
 
-    ENGINEINTERFACE_EXPORT DataDescription() = default;
-    DataDescription& addClusters(std::vector<ClusterDescription> const& value)
+    ClusteredDataDescription() = default;
+    ClusteredDataDescription& addClusters(std::vector<ClusterDescription> const& value)
     {
         clusters.insert(clusters.end(), value.begin(), value.end());
         return *this;
     }
-    DataDescription& addCluster(ClusterDescription const& value)
+    ClusteredDataDescription& addCluster(ClusterDescription const& value)
     {
         addClusters({value});
         return *this;
     }
 
-    DataDescription& addParticles(std::vector<ParticleDescription> const& value)
+    ClusteredDataDescription& addParticles(std::vector<ParticleDescription> const& value)
     {
         particles.insert(particles.end(), value.begin(), value.end());
         return *this;
     }
-    DataDescription& addParticle(ParticleDescription const& value)
+    ClusteredDataDescription& addParticle(ParticleDescription const& value)
     {
         addParticles({value});
         return *this;
@@ -260,9 +264,42 @@ struct DataDescription
         }
         return true;
     }
+    void setCenter(RealVector2D const& center);
+
     RealVector2D calcCenter() const;
     void shift(RealVector2D const& delta);
 };
+
+struct DataDescription
+{
+    std::vector<CellDescription> cells;
+    std::vector<ParticleDescription> particles;
+
+    DataDescription() = default;
+
+    explicit DataDescription(ClusteredDataDescription const& clusteredData);
+
+    DataDescription& add(DataDescription const& other);
+    DataDescription& addCells(std::vector<CellDescription> const& value);
+    DataDescription& addCell(CellDescription const& value);
+
+    DataDescription& addParticles(std::vector<ParticleDescription> const& value);
+    DataDescription& addParticle(ParticleDescription const& value);
+    void clear();
+    bool isEmpty() const;
+    void setCenter(RealVector2D const& center);
+
+    RealVector2D calcCenter() const;
+    void shift(RealVector2D const& delta);
+    void rotate(float angle);
+    void accelerate(RealVector2D const& velDelta, float angularVelDelta);
+
+    DataDescription& addConnection(uint64_t const& cellId1, uint64_t const& cellId2, std::unordered_map<uint64_t, int>& cache);
+
+private:
+    CellDescription& getCellRef(uint64_t const& cellId, std::unordered_map<uint64_t, int>& cache);
+};
+
 
 
 struct DescriptionNavigator
@@ -275,7 +312,7 @@ struct DescriptionNavigator
     std::map<uint64_t, int> cellIndicesByCellIds;
     std::map<uint64_t, int> particleIndicesByParticleIds;
 
-	void update(DataDescription const& data)
+	void update(ClusteredDataDescription const& data)
 	{
 		cellIds.clear();
 		particleIds.clear();
@@ -307,3 +344,5 @@ struct DescriptionNavigator
 		}
 	}
 };
+
+using CellOrParticleDescription = std::variant<CellDescription, ParticleDescription>;

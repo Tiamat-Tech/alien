@@ -1,25 +1,18 @@
 #pragma once
 
-#include "EngineImpl/Definitions.h"
+#include "EngineInterface/Definitions.h"
 #include "EngineInterface/Descriptions.h"
 
 #include "Definitions.h"
+#include "AlienWindow.h"
 
-class _SpatialControlWindow
+class _SpatialControlWindow : public _AlienWindow
 {
 public:
-    _SpatialControlWindow(
-        SimulationController const& simController,
-        Viewport const& viewport,
-        StyleRepository const& styleRepository);
-    ~_SpatialControlWindow();
-
-    void process();
-
-    bool isOn() const;
-    void setOn(bool value);
+    _SpatialControlWindow(SimulationController const& simController, Viewport const& viewport);
 
 private:
+    void processIntern();
     void processZoomInButton();
     void processZoomOutButton();
     void processResizeButton();
@@ -31,13 +24,7 @@ private:
 
     SimulationController _simController;
     Viewport _viewport;
-    StyleRepository _styleRepository;
 
-    TextureData _zoomInTexture;
-    TextureData _zoomOutTexture;
-    TextureData _resizeTexture;
-
-    bool _on = false;
     bool _showResizeDialog = false;
     bool _scaleContent = false;
     int _width = 0;

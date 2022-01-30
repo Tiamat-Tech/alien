@@ -1,8 +1,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
-
-#include "CudaSimulation.cuh"
+#include <stdint.h>
 
 #define MAX_TOKEN_MEM_SIZE 256
 #define MAX_CELL_BONDS 6
@@ -14,6 +13,9 @@ struct TokenAccessTO
 	float energy;
 	char memory[MAX_TOKEN_MEM_SIZE];
 	int cellIndex;
+
+	//only for temporary use
+	int sequenceNumber;
 };
 
 struct ParticleMetadataAccessTO

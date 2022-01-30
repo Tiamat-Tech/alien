@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Base/Definitions.h"
-#include "EngineImpl/Definitions.h"
+#include "EngineInterface/Definitions.h"
 
 #include "Definitions.h"
 
@@ -31,5 +31,5 @@ private:
     SimulationController _simController;
     Viewport _viewport;
 
-    boost::optional<RealVector2D> _worldCenterForDragging;
+    std::optional<RealVector2D> _worldCenterForDragging;
 };

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EngineImpl/Definitions.h"
+#include "EngineInterface/Definitions.h"
 #include "EngineInterface/Descriptions.h"
 #include "Definitions.h"
 
@@ -10,8 +10,9 @@ public:
     _NewSimulationDialog(
         SimulationController const& simController,
         Viewport const& viewport,
-        StatisticsWindow const& statisticsWindow,
-        StyleRepository const& styleRepository);
+        StatisticsWindow const& statisticsWindow);
+
+    ~_NewSimulationDialog();
 
     void process();
 
@@ -23,9 +24,10 @@ private:
     SimulationController _simController;
     Viewport _viewport;
     StatisticsWindow _statisticsWindow;
-    StyleRepository _styleRepository;
 
     bool _on = false;
+    bool _adoptSimulationParameters = true;
+    bool _adoptSymbols = true;
     int _width = 0;
     int _height = 0;
 };

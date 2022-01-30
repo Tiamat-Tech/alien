@@ -2,12 +2,12 @@
 
 namespace Const
 {
-    std::string const ProgramVersion = "3 preview";
+    std::string const ProgramVersion = "3.0.0";
 
-    std::string const BasePath = "Resources/";
+    std::string const BasePath = "resources/";
 
+    auto const LogFilename = "log.txt";
     auto const AutosaveFile = BasePath + "autosave.sim";
-    auto const LogFilename = BasePath + "log.txt";
     auto const SettingsFilename = BasePath + "settings.json";
 
     auto const SimulationFragmentShader = BasePath + "shader.fs";

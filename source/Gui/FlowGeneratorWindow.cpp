@@ -1,44 +1,33 @@
 #include "FlowGeneratorWindow.h"
 
-#include "imgui.h"
+#include <imgui.h>
 
 #include "Base/Definitions.h"
-#include "EngineImpl/SimulationController.h"
+#include "EngineInterface/SimulationController.h"
 #include "StyleRepository.h"
 #include "AlienImGui.h"
 #include "GlobalSettings.h"
 
 namespace
 {
-    auto const ItemTextWidth = 130.0f;
+    auto const MaxContentTextWidth = 120.0f;
 }
 
 _FlowGeneratorWindow::_FlowGeneratorWindow(SimulationController const& simController)
-    : _simController(simController)
+    : _AlienWindow("Flow generator", "windows.flow generator", false)
+    , _simController(simController)
 {
-    _on = GlobalSettings::getInstance().getBoolState("windows.flow generator.active", false);
 }
 
-_FlowGeneratorWindow::~_FlowGeneratorWindow()
+void _FlowGeneratorWindow::processIntern()
 {
-    GlobalSettings::getInstance().setBoolState("windows.flow generator.active", _on);
-}
-
-void _FlowGeneratorWindow::process()
-{
-    if (!_on) {
-        return;
-    }
     auto flowFieldSettings = _simController->getFlowFieldSettings();
     auto origFlowFieldSettings = _simController->getOriginalFlowFieldSettings();
     auto lastFlowFieldSettings = flowFieldSettings;
 
     auto worldSize = _simController->getWorldSize();
 
-    ImGui::SetNextWindowBgAlpha(Const::WindowAlpha * ImGui::GetStyle().Alpha);
-    ImGui::Begin("Flow generator", &_on, ImGuiWindowFlags_None);
-
-    ImGui::Checkbox("##", &flowFieldSettings.active);
+    AlienImGui::ToggleButton(" ", flowFieldSettings.active);
     ImGui::SameLine();
     
     const char* flowTypes[] = {"Radial flow"};
@@ -59,13 +48,14 @@ void _FlowGeneratorWindow::process()
                 _simController->setOriginalFlowFieldCenter(flowFieldSettings.centers[index], index);
                 ++flowFieldSettings.numCenters;
             }
+            AlienImGui::Tooltip("Add center");
         }
 
         for (int tab = 0; tab < flowFieldSettings.numCenters; ++tab) {
             FlowCenter& flowCenter = flowFieldSettings.centers[tab];
             FlowCenter& origFlowCenter = origFlowFieldSettings.centers[tab];
             bool open = true;
-            char name[16];
+            char name[18] = {};
             bool* openPtr = flowFieldSettings.numCenters == 1 ? NULL : &open;
             snprintf(name, IM_ARRAYSIZE(name), "Center %01d", tab + 1);
             if (ImGui::BeginTabItem(name, openPtr, ImGuiTabItemFlags_None)) {
@@ -73,7 +63,7 @@ void _FlowGeneratorWindow::process()
                 AlienImGui::SliderFloat(
                     AlienImGui::SliderFloatParameters()
                         .name("Position X")
-                        .textWidth(ItemTextWidth)
+                        .textWidth(MaxContentTextWidth)
                         .min(0)
                         .max(toFloat(worldSize.x))
                         .format("%.0f")
@@ -82,7 +72,7 @@ void _FlowGeneratorWindow::process()
                 AlienImGui::SliderFloat(
                     AlienImGui::SliderFloatParameters()
                         .name("Position Y")
-                        .textWidth(ItemTextWidth)
+                        .textWidth(MaxContentTextWidth)
                         .min(0)
                         .max(toFloat(worldSize.y))
                         .format("%.0f")
@@ -91,7 +81,7 @@ void _FlowGeneratorWindow::process()
                 AlienImGui::SliderFloat(
                     AlienImGui::SliderFloatParameters()
                         .name("Radius")
-                        .textWidth(ItemTextWidth)
+                        .textWidth(MaxContentTextWidth)
                         .min(0)
                         .max(std::min(toFloat(worldSize.x), toFloat(worldSize.y)) / 2)
                         .format("%.0f")
@@ -100,7 +90,7 @@ void _FlowGeneratorWindow::process()
                 AlienImGui::SliderFloat(
                     AlienImGui::SliderFloatParameters()
                         .name("Strength")
-                        .textWidth(ItemTextWidth)
+                        .textWidth(MaxContentTextWidth)
                         .min(0)
                         .max(0.5f)
                         .logarithmic(true)
@@ -114,7 +104,7 @@ void _FlowGeneratorWindow::process()
                 AlienImGui::Combo(
                     AlienImGui::ComboParameters()
                         .name("Orientation")
-                        .textWidth(ItemTextWidth)
+                        .textWidth(MaxContentTextWidth)
                         .defaultValue(origCurrentOrientation)
                         .values(orientations),
                     currentOrientation);
@@ -134,21 +124,10 @@ void _FlowGeneratorWindow::process()
         ImGui::EndTabBar();
     }
     ImGui::EndDisabled();
-    ImGui::End();
 
     if (flowFieldSettings != lastFlowFieldSettings) {
         _simController->setFlowFieldSettings_async(flowFieldSettings);
     }
-}
-
-bool _FlowGeneratorWindow::isOn() const
-{
-    return _on;
-}
-
-void _FlowGeneratorWindow::setOn(bool value)
-{
-    _on = value;
 }
 
 FlowCenter _FlowGeneratorWindow::createFlowCenter()

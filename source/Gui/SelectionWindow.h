@@ -1,22 +1,16 @@
 #pragma once
 
+#include "EngineInterface/Definitions.h"
 #include "Definitions.h"
-#include "EngineImpl/Definitions.h"
+#include "AlienWindow.h"
 
-class _SelectionWindow
+class _SelectionWindow : public _AlienWindow
 {
 public:
-    _SelectionWindow(EditorModel const& editorModel, StyleRepository const& styleRepository);
-    ~_SelectionWindow();
-
-    void process();
-
-    bool isOn() const;
-    void setOn(bool value);
+    _SelectionWindow(EditorModel const& editorModel);
 
 private:
-    EditorModel _editorModel; 
-    StyleRepository _styleRepository;
+    void processIntern();
 
-    bool _on = false;
+    EditorModel _editorModel; 
 };

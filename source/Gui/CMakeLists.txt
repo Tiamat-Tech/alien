@@ -7,10 +7,14 @@ PUBLIC
     ManipulatorWindow.h
     AlienImGui.cpp
     AlienImGui.h
+    AlienWindow.cpp
+    AlienWindow.h
     AutosaveController.cpp
     AutosaveController.h
     ColorizeDialog.cpp
     ColorizeDialog.h
+    CreatorWindow.cpp
+    CreatorWindow.h
     Definitions.h
     DisplaySettingsDialog.cpp
     DisplaySettingsDialog.h
@@ -28,22 +32,34 @@ PUBLIC
     GlobalSettings.h
     GpuSettingsDialog.cpp
     GpuSettingsDialog.h
+    InspectorWindow.cpp
+    InspectorWindow.h
     LogWindow.cpp
     LogWindow.h
     Main.cpp
     MainWindow.cpp
     MainWindow.h
-    ModeWindow.cpp
-    ModeWindow.h
+    ModeController.cpp
+    ModeController.h
+    MultiplierWindow.cpp
+    MultiplierWindow.h
     NewSimulationDialog.cpp
     NewSimulationDialog.h
     OpenGLHelper.cpp
     OpenGLHelper.h
+    OpenPatternDialog.cpp
+    OpenPatternDialog.h
     OpenSimulationDialog.cpp
     OpenSimulationDialog.h
+    OpenSymbolsDialog.cpp
+    OpenSymbolsDialog.h
     Resources.h
+    SavePatternDialog.cpp
+    SavePatternDialog.h
     SaveSimulationDialog.cpp
     SaveSimulationDialog.h
+    SaveSymbolsDialog.cpp
+    SaveSymbolsDialog.h
     SelectionWindow.cpp
     SelectionWindow.h
     Shader.cpp
@@ -64,6 +80,8 @@ PUBLIC
     StatisticsWindow.h
     StyleRepository.cpp
     StyleRepository.h
+    SymbolsWindow.cpp
+    SymbolsWindow.h
     TemporalControlWindow.cpp
     TemporalControlWindow.h
     UiController.cpp

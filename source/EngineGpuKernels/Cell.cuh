@@ -1,9 +1,10 @@
 #pragma once
 
-#include "EngineInterface/ElementaryTypes.h"
+#include "EngineInterface/Enums.h"
 
 #include "Base.cuh"
 #include "Definitions.cuh"
+#include "AccessTOs.cuh"
 
 struct CellMetadata
 {
@@ -56,6 +57,13 @@ struct Cell
     float2 temp2;
     float2 temp3;
 
+    __device__ __inline__ bool isDeleted() const { return energy == 0; }
+
+    __device__ __inline__ void setDeleted()
+    {
+        energy = 0;
+    }
+
     __device__ __inline__ void getLock()
     {
         while (1 == atomicExch(&locked, 1)) {}
@@ -76,10 +84,9 @@ struct Cell
         atomicExch(&locked, 0);
     }
 
-    __inline__ __device__ Enums::CellFunction::Type getCellFunctionType() const
+    __inline__ __device__ Enums::CellFunction getCellFunctionType() const
     {
-        return static_cast<Enums::CellFunction::Type>(
-            static_cast<unsigned int>(cellFunctionType) % Enums::CellFunction::_COUNTER);
+        return static_cast<unsigned int>(cellFunctionType) % Enums::CellFunction_Count;
     }
 };
 

@@ -3,7 +3,6 @@
 #include <chrono>
 
 #include "EngineInterface/Definitions.h"
-#include "EngineImpl/Definitions.h"
 #include "Definitions.h"
 
 class _StartupWindow
@@ -32,6 +31,6 @@ private:
 
     State _state = State::Unintialized;
     TextureData _logo;
-    boost::optional<std::chrono::steady_clock::time_point> _startupTimepoint;
-    boost::optional<std::chrono::steady_clock::time_point> _lastActivationTimepoint;
+    std::optional<std::chrono::steady_clock::time_point> _startupTimepoint;
+    std::optional<std::chrono::steady_clock::time_point> _lastActivationTimepoint;
 };

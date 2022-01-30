@@ -4,21 +4,16 @@
 #include <map>
 #include <string>
 
-#include <boost/optional.hpp>
-#include <boost/shared_ptr.hpp>
-
-#include "ElementaryTypes.h"
+#include "Base/Definitions.h"
+#include "Enums.h"
 
 struct SimulationParameters;
 
+struct ClusteredDataDescription;
 struct DataDescription;
 struct ClusterDescription;
 struct CellDescription;
 struct ParticleDescription;
-
-struct DataChangeDescription;
-struct CellChangeDescription;
-struct ParticleChangeDescription;
 
 struct GpuSettings;
 
@@ -26,6 +21,9 @@ struct GeneralSettings;
 struct Settings;
 
 class _Serializer;
-using Serializer = boost::shared_ptr<_Serializer>;
+using Serializer = std::shared_ptr<_Serializer>;
+
+class _SimulationController;
+using SimulationController = std::shared_ptr<_SimulationController>;
 
 struct OverallStatistics;

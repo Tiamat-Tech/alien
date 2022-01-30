@@ -8,19 +8,9 @@
 
 #include "Base/Exceptions.h"
 
-#define KERNEL_CALL_HOST(func, ...) \
-    func<<<1, 1>>>(__VA_ARGS__); \
-    cudaDeviceSynchronize(); \
-    CHECK_FOR_CUDA_ERROR(cudaGetLastError());
+#define KERNEL_CALL(func, ...) func<<<gpuSettings.numBlocks, gpuSettings.numThreadsPerBlock>>>(__VA_ARGS__);
+#define KERNEL_CALL_1_1(func, ...) func<<<1, 1>>>(__VA_ARGS__);
 
-#define KERNEL_CALL(func, ...)  \
-        func<<<gpuConstants.NUM_BLOCKS, gpuConstants.NUM_THREADS_PER_BLOCK>>>(__VA_ARGS__); \
-        cudaDeviceSynchronize();
-
-#define KERNEL_CALL_1_1(func, ...)  \
-        func<<<1, 1>>>(__VA_ARGS__); \
-        cudaDeviceSynchronize();
-        
 template< typename T >
 void checkAndThrowError(T result, char const *const func, const char *const file, int const line)
 {
@@ -28,7 +18,7 @@ void checkAndThrowError(T result, char const *const func, const char *const file
         DEVICE_RESET
         if (cudaError::cudaErrorInsufficientDriver == result) {
             throw SpecificCudaException(
-                "Your graphics driver is not compatible with CUDA 11.2. Please update your Nvidia graphics driver and restart.");
+                "Your graphics driver is not compatible with the required CUDA version. Please update your Nvidia graphics driver and restart.");
         } else if (cudaError::cudaErrorOperatingSystem == result) {
             throw SpecificCudaException("An operating system call within the CUDA api failed. Please check if your "
                                         "monitor is plugged to the correct graphics card.");
@@ -52,3 +42,9 @@ void checkAndThrowError(T result, char const *const func, const char *const file
     checkAndThrowError( (val), #val, __FILENAME__, __LINE__ )
 
 #define ABORT() *((int*)nullptr) = 1;
+
+#define FP_PRECISION 0.00001
+
+#define CUDA_THROW_NOT_IMPLEMENTED() \
+    printf("not implemented"); \
+    asm("trap;");

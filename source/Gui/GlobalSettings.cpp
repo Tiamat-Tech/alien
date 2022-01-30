@@ -72,12 +72,12 @@ void GlobalSettings::encodeDecodeGpuSettings(GpuSettings& gpuSettings, ParserTas
     GpuSettings defaultSettings;
     JsonParser::encodeDecode(
         _impl->_tree,
-        gpuSettings.NUM_BLOCKS,
-        defaultSettings.NUM_BLOCKS, "settings.gpu.num blocks", task);
+        gpuSettings.numBlocks,
+        defaultSettings.numBlocks, "settings.gpu.num blocks", task);
     JsonParser::encodeDecode(
         _impl->_tree,
-        gpuSettings.NUM_THREADS_PER_BLOCK,
-        defaultSettings.NUM_THREADS_PER_BLOCK,
+        gpuSettings.numThreadsPerBlock,
+        defaultSettings.numThreadsPerBlock,
         "settings.gpu.num threads per block",
         task);
 }
@@ -85,7 +85,7 @@ void GlobalSettings::encodeDecodeGpuSettings(GpuSettings& gpuSettings, ParserTas
 GlobalSettings::GlobalSettings()
 {
     try {
-        _impl = new GlobalSettingsImpl;
+        _impl = std::make_shared<GlobalSettingsImpl>();
         std::ifstream stream(Const::SettingsFilename, std::ios::binary);
         if (!stream) {
             return;
@@ -116,6 +116,4 @@ GlobalSettings::~GlobalSettings()
     } catch (...) {
         //do nothing
     }
-
-    delete _impl;
 }

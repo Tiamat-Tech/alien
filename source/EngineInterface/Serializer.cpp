@@ -15,10 +15,7 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/range/adaptors.hpp>
 
-#include "Base/ServiceLocator.h"
-
 #include "Descriptions.h"
-#include "ChangeDescriptions.h"
 #include "SimulationParameters.h"
 #include "Parser.h"
 
@@ -36,21 +33,6 @@ namespace cereal
         ar(data.x, data.y);
     }
 
-    template <class Archive, class T>
-    inline void save(Archive& ar, boost::optional<T> const& data)
-    {
-        std::optional<T> temp = data ? std::make_optional(*data) : std::optional<T>();
-        ar(temp);
-    }
-
-    template <class Archive, class T>
-    inline void load(Archive& ar, boost::optional<T>& data)
-    {
-        std::optional<T> temp;
-        ar(temp);
-        data = temp ? boost::make_optional(*temp) : boost::optional<T>();
-    }
-
     template <class Archive>
     inline void save(Archive& ar, CellFeatureDescription const& data)
     {
@@ -59,7 +41,7 @@ namespace cereal
     template <class Archive>
     inline void load(Archive& ar, CellFeatureDescription& data)
     {
-        Enums::CellFunction::Type type;
+        Enums::CellFunction type;
         ar(type, data.volatileData, data.constData);
         data.setType(type);
     }
@@ -112,13 +94,13 @@ namespace cereal
         ar(data.id, data.pos, data.vel, data.energy, data.metadata);
     }
     template <class Archive>
-    inline void serialize(Archive& ar, DataDescription& data)
+    inline void serialize(Archive& ar, ClusteredDataDescription& data)
     {
         ar(data.clusters, data.particles);
     }
 }
 
-bool _Serializer::serializeSimulationToFile(string const& filename, DeserializedSimulation const& data)
+bool _Serializer::serializeSimulationToFile(std::string const& filename, DeserializedSimulation const& data)
 {
     try {
         std::regex fileEndingExpr("\\.\\w+$");
@@ -158,7 +140,7 @@ bool _Serializer::serializeSimulationToFile(string const& filename, Deserialized
     }
 }
 
-bool _Serializer::deserializeSimulationFromFile(string const& filename, DeserializedSimulation& data)
+bool _Serializer::deserializeSimulationFromFile(std::string const& filename, DeserializedSimulation& data)
 {
     try {
         std::regex fileEndingExpr("\\.\\w+$");
@@ -199,7 +181,67 @@ bool _Serializer::deserializeSimulationFromFile(string const& filename, Deserial
     }
 }
 
-void _Serializer::serializeDataDescription(DataDescription const& data, std::ostream& stream) const
+bool _Serializer::serializeContentToFile(std::string const& filename, ClusteredDataDescription const& content)
+{
+    try {
+        std::ofstream stream(filename, std::ios::binary);
+        if (!stream) {
+            return false;
+        }
+        serializeDataDescription(content, stream);
+        stream.close();
+        return true;
+    } catch (std::exception const& e) {
+        throw std::runtime_error(std::string("An error occurred while serializing simulation data: ") + e.what());
+    }
+}
+
+bool _Serializer::deserializeContentFromFile(std::string const& filename, ClusteredDataDescription& content)
+{
+    try {
+        std::ifstream stream(filename, std::ios::binary);
+        if (!stream) {
+            return false;
+        }
+        deserializeDataDescription(content, stream);
+        stream.close();
+        return true;
+    } catch (std::exception const& e) {
+        throw std::runtime_error("An error occurred while loading the file " + filename + ": " + e.what());
+    }
+}
+
+bool _Serializer::serializeSymbolsToFile(std::string const& filename, SymbolMap const& symbolMap)
+{
+    try {
+        std::ofstream stream(filename, std::ios::binary);
+        if (!stream) {
+            return false;
+        }
+        serializeSymbolMap(symbolMap, stream);
+        stream.close();
+        return true;
+    } catch (std::exception const& e) {
+        throw std::runtime_error(std::string("An error occurred while serializing simulation data: ") + e.what());
+    }
+}
+
+bool _Serializer::deserializeSymbolsFromFile(std::string const& filename, SymbolMap& symbolMap)
+{
+    try {
+        std::ifstream stream(filename, std::ios::binary);
+        if (!stream) {
+            return false;
+        }
+        deserializeSymbolMap(symbolMap, stream);
+        stream.close();
+        return true;
+    } catch (std::exception const& e) {
+        throw std::runtime_error("An error occurred while loading the file " + filename + ": " + e.what());
+    }
+}
+
+void _Serializer::serializeDataDescription(ClusteredDataDescription const& data, std::ostream& stream) const
 {
     cereal::PortableBinaryOutputArchive archive(stream);
     archive(data);
@@ -221,7 +263,7 @@ void _Serializer::serializeSymbolMap(SymbolMap const symbols, std::ostream& stre
     boost::property_tree::json_parser::write_json(stream, tree);
 }
 
-void _Serializer::deserializeDataDescription(DataDescription& data, std::istream& stream) const
+void _Serializer::deserializeDataDescription(ClusteredDataDescription& data, std::istream& stream) const
 {
     cereal::PortableBinaryInputArchive archive(stream);
     archive(data);
@@ -240,10 +282,10 @@ void _Serializer::deserializeTimestepAndSettings(uint64_t& timestep, Settings& s
 
 void _Serializer::deserializeSymbolMap(SymbolMap& symbolMap, std::istream& stream)
 {
+    symbolMap.clear();
     boost::property_tree::ptree tree;
     boost::property_tree::read_json(stream, tree);
-    std::map<std::string, std::string> result;
     for (auto const& [key, value] : tree) {
-        result.emplace(key.data(), value.data());
+        symbolMap.emplace(key.data(), value.data());
     }
 }

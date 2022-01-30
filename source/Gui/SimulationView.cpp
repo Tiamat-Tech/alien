@@ -1,16 +1,17 @@
 #include "SimulationView.h"
 
 #include <glad/glad.h>
-#include "imgui.h"
+#include <imgui.h>
 
-#include "EngineImpl/SimulationController.h"
+#include "EngineInterface/SimulationController.h"
 
 #include "Shader.h"
 #include "SimulationScrollbar.h"
 #include "Viewport.h"
 #include "Resources.h"
-#include "ModeWindow.h"
+#include "ModeController.h"
 #include "StyleRepository.h"
+#include "GlobalSettings.h"
 
 namespace
 {
@@ -18,33 +19,32 @@ namespace
     auto const MotionBlurZooming = 0.5f;
     auto const ZoomFactorForOverlay = 16.0f;
 
-    std::unordered_map<Enums::CellFunction::Type, std::string> cellFunctionToStringMap = {
-        {Enums::CellFunction::COMPUTER, "Computer"},
-        {Enums::CellFunction::PROPULSION, "Propulsion"},
-        {Enums::CellFunction::SCANNER, "Scanner"},
-        {Enums::CellFunction::WEAPON, "Weapon"},
-        {Enums::CellFunction::CONSTRUCTOR, "Constructor"},
-        {Enums::CellFunction::SENSOR, "Sensor"},
-        {Enums::CellFunction::MUSCLE, "Muscle"},
+    std::unordered_map<Enums::CellFunction, std::string> cellFunctionToStringMap = {
+        {Enums::CellFunction_Computation, "Computation"},
+        {Enums::CellFunction_Communication, "Communication"},
+        {Enums::CellFunction_Scanner, "Scanner"},
+        {Enums::CellFunction_Digestion, "Digestion"},
+        {Enums::CellFunction_Constructor, "Construction"},
+        {Enums::CellFunction_Sensor, "Sensor"},
+        {Enums::CellFunction_Muscle, "Muscle"},
     };
 }
 
 _SimulationView::_SimulationView(
-    StyleRepository const& styleRepository,
     SimulationController const& simController,
-    ModeWindow const& modeWindow,
+    ModeController const& modeWindow,
     Viewport const& viewport)
     : _viewport(viewport)
-    , _styleRepository(styleRepository)
 {
+    _isOverlayActive = GlobalSettings::getInstance().getBoolState("settings.simulation view.overlay", true);
     _modeWindow = modeWindow;
 
     _simController = simController;
-    _shader = boost::make_shared<_Shader>(Const::SimulationVertexShader, Const::SimulationFragmentShader);
+    _shader = std::make_shared<_Shader>(Const::SimulationVertexShader, Const::SimulationFragmentShader);
 
-    _scrollbarX = boost::make_shared<_SimulationScrollbar>(
+    _scrollbarX = std::make_shared<_SimulationScrollbar>(
         "SimScrollbarX", _SimulationScrollbar ::Orientation::Horizontal, _simController, _viewport);
-    _scrollbarY = boost::make_shared<_SimulationScrollbar>(
+    _scrollbarY = std::make_shared<_SimulationScrollbar>(
         "SimScrollbarY", _SimulationScrollbar::Orientation::Vertical, _simController, _viewport);
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -94,6 +94,11 @@ _SimulationView::_SimulationView(
     _shader->setFloat("motionBlurFactor", MotionBlurStandard);
 }
 
+_SimulationView::~_SimulationView()
+{
+    GlobalSettings::getInstance().setBoolState("settings.simulation view.overlay", _isOverlayActive);
+}
+
 void _SimulationView::resize(IntVector2D const& size)
 {
     if (_areTexturesInitialized) {
@@ -109,7 +114,7 @@ void _SimulationView::resize(IntVector2D const& size)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, size.x, size.y, 0, GL_RGB, GL_UNSIGNED_SHORT, NULL);
-    _simController->registerImageResource(_textureId);
+    _simController->registerImageResource(reinterpret_cast<void*>(uintptr_t(_textureId)));
 
     glGenTextures(1, &_textureFramebufferId);
     glBindTexture(GL_TEXTURE_2D, _textureFramebufferId);
@@ -134,7 +139,7 @@ void _SimulationView::leftMouseButtonPressed(IntVector2D const& viewPos)
 
 void _SimulationView::leftMouseButtonHold(IntVector2D const& viewPos, IntVector2D const& prevViewPos)
 {
-    if (_modeWindow->getMode() == _ModeWindow::Mode::Navigation) {
+    if (_modeWindow->getMode() == _ModeController::Mode::Navigation) {
         _viewport->zoom(viewPos, _viewport->getZoomSensitivity());
     }
 }
@@ -151,7 +156,7 @@ void _SimulationView::rightMouseButtonPressed()
 
 void _SimulationView::rightMouseButtonHold(IntVector2D const& viewPos)
 {
-    if (_modeWindow->getMode() == _ModeWindow::Mode::Navigation) {
+    if (_modeWindow->getMode() == _ModeController::Mode::Navigation) {
         _viewport->zoom(viewPos, 1.0f / _viewport->getZoomSensitivity());
     }
 }
@@ -173,7 +178,7 @@ void _SimulationView::middleMouseButtonHold(IntVector2D const& viewPos)
 
 void _SimulationView::middleMouseButtonReleased()
 {
-    _worldPosForMovement = boost::none;
+    _worldPosForMovement = std::nullopt;
 }
 
 void _SimulationView::processEvents()
@@ -254,55 +259,89 @@ void _SimulationView::processControls()
     float childWidth = 1 + style.ScrollbarSize + style.WindowPadding.x * 2.0f;
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
-    _scrollbarX->process({{viewport->Pos.x, viewport->Size.y - 17}, {viewport->Size.x - 1 - 17, 1}});
-    _scrollbarY->process({{viewport->Size.x - 17, viewport->Pos.y + 22}, {1, viewport->Size.y - 1 - 17}});
+    auto mainMenubarHeight = StyleRepository::getInstance().scaleContent(22);
+    auto scrollbarThickness = 17;   //fixed
+    _scrollbarX->process(
+        {{viewport->Pos.x, viewport->Size.y - scrollbarThickness}, {viewport->Size.x - 1 - scrollbarThickness, 1}});
+    _scrollbarY->process(
+        {{viewport->Size.x - scrollbarThickness, viewport->Pos.y + mainMenubarHeight},
+         {1, viewport->Size.y - 1 - scrollbarThickness}});
+}
+
+bool _SimulationView::isOverlayActive() const
+{
+    return _isOverlayActive;
+}
+
+void _SimulationView::setOverlayActive(bool active)
+{
+    _isOverlayActive = active;
 }
 
 void _SimulationView::updateImageFromSimulation()
 {
-
     auto worldRect = _viewport->getVisibleWorldRect();
     auto viewSize = _viewport->getViewSize();
     auto zoomFactor = _viewport->getZoomFactor();
 
-    if (zoomFactor < ZoomFactorForOverlay) {
-        _simController->tryDrawVectorGraphics(
-            worldRect.topLeft, worldRect.bottomRight, {viewSize.x, viewSize.y}, zoomFactor);
-        _overlay = boost::none;
-
-    } else {
+    if (_isOverlayActive && zoomFactor >= ZoomFactorForOverlay) {
         auto overlay = _simController->tryDrawVectorGraphicsAndReturnOverlay(
             worldRect.topLeft, worldRect.bottomRight, {viewSize.x, viewSize.y}, zoomFactor);
         if (overlay) {
+            std::sort(overlay->elements.begin(), overlay->elements.end(), [](OverlayElementDescription const& left, OverlayElementDescription const& right) {
+                return left.id < right.id;
+            });
             _overlay = overlay;
         }
+    } else {
+        _simController->tryDrawVectorGraphics(
+            worldRect.topLeft, worldRect.bottomRight, {viewSize.x, viewSize.y}, zoomFactor);
+        _overlay = std::nullopt;
     }
 
     if(_overlay) {
-        ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+        ImDrawList* drawList = ImGui::GetBackgroundDrawList();
         for (auto const& overlayElement : _overlay->elements) {
             if (overlayElement.cell) {
-                auto fontSize = std::min(30.0f, _viewport->getZoomFactor()) / 2;
-                auto viewPos = _viewport->mapWorldToViewPosition({overlayElement.pos.x, overlayElement.pos.y + 0.4f});
-                auto text = cellFunctionToStringMap.at(overlayElement.cellType);
-                draw_list->AddText(
-                    _styleRepository->getMediumFont(),
-                    fontSize,
-                    {viewPos.x - 2 * fontSize, viewPos.y},
-                    Const::CellFunctionOverlayShadowColor,
-                    text.c_str());
-                draw_list->AddText(
-                    _styleRepository->getMediumFont(),
-                    fontSize,
-                    {viewPos.x - 2 * fontSize + 1, viewPos.y + 1},
-                    Const::CellFunctionOverlayColor,
-                    text.c_str());
+                {
+                    auto fontSize = std::min(40.0f, _viewport->getZoomFactor()) / 2;
+                    auto viewPos = _viewport->mapWorldToViewPosition({overlayElement.pos.x, overlayElement.pos.y + 0.4f});
+                    auto text = cellFunctionToStringMap.at(overlayElement.cellType);
+                    drawList->AddText(
+                        StyleRepository::getInstance().getMediumFont(),
+                        fontSize,
+                        {viewPos.x - 2 * fontSize, viewPos.y},
+                        Const::CellFunctionOverlayShadowColor,
+                        text.c_str());
+                    drawList->AddText(
+                        StyleRepository::getInstance().getMediumFont(),
+                        fontSize,
+                        {viewPos.x - 2 * fontSize + 1, viewPos.y + 1},
+                        Const::CellFunctionOverlayColor,
+                        text.c_str());
+                }
+                {
+                    auto viewPos = _viewport->mapWorldToViewPosition({overlayElement.pos.x - 0.12f, overlayElement.pos.y - 0.25f});
+                    auto fontSize = _viewport->getZoomFactor() / 2;
+                    drawList->AddText(
+                        StyleRepository::getInstance().getLargeFont(),
+                        fontSize,
+                        {viewPos.x, viewPos.y},
+                        Const::BranchNumberOverlayShadowColor,
+                        std::to_string(overlayElement.branchNumber).c_str());
+                    drawList->AddText(
+                        StyleRepository::getInstance().getLargeFont(),
+                        fontSize,
+                        {viewPos.x + 1, viewPos.y + 1},
+                        Const::BranchNumberOverlayColor,
+                        std::to_string(overlayElement.branchNumber).c_str());
+                }
             }
 
             if (overlayElement.selected == 1) {
                 auto center = _viewport->mapWorldToViewPosition({overlayElement.pos.x, overlayElement.pos.y});
-                draw_list->AddCircle(
-                    {center.x, center.y}, _viewport->getZoomFactor() * 0.8f, Const::SelectedCellOverlayColor, 0, 2.0f);
+                drawList->AddCircle(
+                    {center.x, center.y}, _viewport->getZoomFactor() * 0.65f, Const::SelectedCellOverlayColor, 0, 2.0f);
             }
         }
     }

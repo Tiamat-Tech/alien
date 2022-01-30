@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 struct Cell;
 struct Token;
 struct Particle;
@@ -16,6 +18,24 @@ struct SimulationParameters;
 struct GpuSettings;
 class CudaMonitorData;
 
+class _SimulationKernelsLauncher;
+using SimulationKernelsLauncher = std::shared_ptr<_SimulationKernelsLauncher>;
+
+class _DataAccessKernelsLauncher;
+using DataAccessKernelsLauncher = std::shared_ptr<_DataAccessKernelsLauncher>;
+
+class _GarbageCollectorKernelsLauncher;
+using GarbageCollectorKernelsLauncher = std::shared_ptr<_GarbageCollectorKernelsLauncher>;
+
+class _RenderingKernelsLauncher;
+using RenderingKernelsLauncher = std::shared_ptr<_RenderingKernelsLauncher>;
+
+class _EditKernelsLauncher;
+using EditKernelsLauncher = std::shared_ptr<_EditKernelsLauncher>;
+
+class _MonitorKernelsLauncher;
+using MonitorKernelsLauncher = std::shared_ptr<_MonitorKernelsLauncher>;
+
 struct ApplyForceData
 {
     float2 startPos;
@@ -25,21 +45,21 @@ struct ApplyForceData
     bool onlyRotation;
 };
 
-struct SwitchSelectionData
+struct PointSelectionData
 {
     float2 pos;
     float radius;
 };
 
-struct SetSelectionData
+struct AreaSelectionData
 {
     float2 startPos;
     float2 endPos;
 };
 
-
-
-#define FP_PRECISION 0.00001
-
-#define CUDA_THROW_NOT_IMPLEMENTED() printf("not implemented"); \
-    asm("trap;");
+struct ArraySizes
+{
+    int cellArraySize;
+    int particleArraySize;
+    int tokenArraySize;
+};

@@ -3,7 +3,7 @@
 #include <chrono>
 
 #include "EngineGpuKernels/AccessTOs.cuh"
-#include "EngineInterface/ChangeDescriptions.h"
+#include "EngineGpuKernels/CudaSimulationAdapter.cuh"
 #include "AccessDataTOCache.h"
 #include "DataConverter.h"
 
@@ -11,101 +11,43 @@ namespace
 {
     std::chrono::milliseconds const FrameTimeout(30);
     std::chrono::milliseconds const MonitorUpdate(30);
-
-    class CudaAccess
-    {
-    public:
-        CudaAccess(
-            std::condition_variable& conditionForAccess,
-            std::condition_variable& conditionForWorkerLoop,
-            std::atomic<bool>& accessFlag,
-            std::atomic<bool> const& isSimulationRunning,
-            ExceptionData const& exceptionData,
-            boost::optional<std::chrono::milliseconds> const& maxDuration = boost::none)
-            : _accessFlag(accessFlag)
-            , _conditionForWorkerLoop(conditionForWorkerLoop)
-        {
-            if (!isSimulationRunning.load()) {
-                return;
-            }
-            std::mutex mutex;
-            accessFlag.store(true);
-            std::unique_lock<std::mutex> uniqueLock(mutex);
-            if (maxDuration) {
-                std::cv_status status = conditionForAccess.wait_for(uniqueLock, *maxDuration);
-                _isTimeout = std::cv_status::timeout == status;
-                checkForException(exceptionData);
-            } else {
-                std::cv_status status = conditionForAccess.wait_for(uniqueLock, std::chrono::milliseconds(5000));
-                if (std::cv_status::timeout == status) {
-                    checkForException(exceptionData);
-                    throw std::runtime_error("GPU Timeout");
-                }
-            }
-            conditionForWorkerLoop.notify_all();
-        }
-
-        ~CudaAccess()
-        {
-            _accessFlag.store(false);
-            _conditionForWorkerLoop.notify_all();
-        }
-
-        bool isTimeout() const { return _isTimeout; }
-
-    private:
-        void checkForException(ExceptionData const& exceptionData)
-        {
-            std::unique_lock<std::mutex> uniqueLock(exceptionData.mutex);
-            if (exceptionData.errorMessage) {
-                throw std::runtime_error(*exceptionData.errorMessage);
-            }
-        }
-
-        std::atomic<bool>& _accessFlag;
-        std::condition_variable& _conditionForWorkerLoop;
-
-        bool _isTimeout = false;
-    };
 }
 
 void EngineWorker::initCuda()
 {
-    _CudaSimulation::initCuda();
+    _CudaSimulationAdapter::initCuda();
 }
 
 void EngineWorker::newSimulation(uint64_t timestep, Settings const& settings, GpuSettings const& gpuSettings)
 {
     _settings = settings;
     _gpuConstants = gpuSettings;
-    _dataTOCache = boost::make_shared<_AccessDataTOCache>(gpuSettings);
-    _cudaSimulation = boost::make_shared<_CudaSimulation>(timestep, settings, gpuSettings);
+    _dataTOCache = std::make_shared<_AccessDataTOCache>(gpuSettings);
+    _cudaSimulation = std::make_shared<_CudaSimulationAdapter>(timestep, settings, gpuSettings);
 
     if (_imageResourceToRegister) {
         _cudaResource = _cudaSimulation->registerImageResource(*_imageResourceToRegister);
-        _imageResourceToRegister = boost::none;
+        _imageResourceToRegister = std::nullopt;
     }
 }
 
 void EngineWorker::clear()
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
+    EngineWorkerGuard access(this);
     return _cudaSimulation->clear();
 }
 
-void EngineWorker::registerImageResource(GLuint image)
+void EngineWorker::registerImageResource(void* image)
 {
+    GLuint imageId = reinterpret_cast<uintptr_t>(image);
     if (!_cudaSimulation) {
 
         //cuda is not initialized yet => register image resource later
-        _imageResourceToRegister = image;
+        _imageResourceToRegister = imageId;
     } else {
 
-        CudaAccess access(
-            _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
-
-        _cudaResource = _cudaSimulation->registerImageResource(image);
+        EngineWorkerGuard access(this);
+        _cudaResource = _cudaSimulation->registerImageResource(imageId);
     }
 }
 
@@ -115,13 +57,7 @@ void EngineWorker::tryDrawVectorGraphics(
     IntVector2D const& imageSize,
     double zoom)
 {
-    CudaAccess access(
-        _conditionForAccess,
-        _conditionForWorkerLoop,
-        _requireAccess,
-        _isSimulationRunning,
-        _exceptionData,
-        FrameTimeout);
+    EngineWorkerGuard access(this, FrameTimeout);
 
     if (!access.isTimeout()) {
         _cudaSimulation->drawVectorGraphics(
@@ -133,19 +69,13 @@ void EngineWorker::tryDrawVectorGraphics(
     }
 }
 
-boost::optional<OverlayDescription> EngineWorker::tryDrawVectorGraphicsAndReturnOverlay(
+std::optional<OverlayDescription> EngineWorker::tryDrawVectorGraphicsAndReturnOverlay(
     RealVector2D const& rectUpperLeft,
     RealVector2D const& rectLowerRight,
     IntVector2D const& imageSize,
     double zoom)
 {
-    CudaAccess access(
-        _conditionForAccess,
-        _conditionForWorkerLoop,
-        _requireAccess,
-        _isSimulationRunning,
-        _exceptionData,
-        FrameTimeout);
+    EngineWorkerGuard access(this, FrameTimeout);
 
     if (!access.isTimeout()) {
         _cudaSimulation->drawVectorGraphics(
@@ -170,13 +100,12 @@ boost::optional<OverlayDescription> EngineWorker::tryDrawVectorGraphicsAndReturn
 
         return result;
     }
-    return boost::none;
+    return std::nullopt;
 }
 
-DataDescription EngineWorker::getSimulationData(IntVector2D const& rectUpperLeft, IntVector2D const& rectLowerRight)
+ClusteredDataDescription EngineWorker::getClusteredSimulationData(IntVector2D const& rectUpperLeft, IntVector2D const& rectLowerRight)
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
+    EngineWorkerGuard access(this);
 
     auto arraySizes = _cudaSimulation->getArraySizes();
     DataAccessTO dataTO =
@@ -186,7 +115,73 @@ DataDescription EngineWorker::getSimulationData(IntVector2D const& rectUpperLeft
 
     DataConverter converter(_settings.simulationParameters, _gpuConstants);
 
+    auto result = converter.convertAccessTOtoClusteredDataDescription(dataTO);
+    _dataTOCache->releaseDataTO(dataTO);
+
+    return result;
+}
+
+DataDescription EngineWorker::getSimulationData(IntVector2D const& rectUpperLeft, IntVector2D const& rectLowerRight)
+{
+    EngineWorkerGuard access(this);
+
+    auto arraySizes = _cudaSimulation->getArraySizes();
+    DataAccessTO dataTO = _dataTOCache->getDataTO({arraySizes.cellArraySize, arraySizes.particleArraySize, arraySizes.tokenArraySize});
+    _cudaSimulation->getSimulationData({rectUpperLeft.x, rectUpperLeft.y}, int2{rectLowerRight.x, rectLowerRight.y}, dataTO);
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+
     auto result = converter.convertAccessTOtoDataDescription(dataTO);
+    _dataTOCache->releaseDataTO(dataTO);
+
+    return result;
+}
+
+ClusteredDataDescription EngineWorker::getSelectedClusteredSimulationData(bool includeClusters)
+{
+    EngineWorkerGuard access(this);
+
+    auto arraySizes = _cudaSimulation->getArraySizes();
+    DataAccessTO dataTO = _dataTOCache->getDataTO({arraySizes.cellArraySize, arraySizes.particleArraySize, arraySizes.tokenArraySize});
+    _cudaSimulation->getSelectedSimulationData(includeClusters, dataTO);
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+
+    auto result = converter.convertAccessTOtoClusteredDataDescription(dataTO);
+    _dataTOCache->releaseDataTO(dataTO);
+
+    return result;
+}
+
+DataDescription EngineWorker::getSelectedSimulationData(bool includeClusters)
+{
+    EngineWorkerGuard access(this);
+
+    auto arraySizes = _cudaSimulation->getArraySizes();
+    DataAccessTO dataTO =
+        _dataTOCache->getDataTO({arraySizes.cellArraySize, arraySizes.particleArraySize, arraySizes.tokenArraySize});
+    _cudaSimulation->getSelectedSimulationData(includeClusters, dataTO);
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+
+    auto result = converter.convertAccessTOtoDataDescription(dataTO);
+    _dataTOCache->releaseDataTO(dataTO);
+
+    return result;
+}
+
+DataDescription EngineWorker::getInspectedSimulationData(std::vector<uint64_t> entityIds)
+{
+    EngineWorkerGuard access(this);
+
+    auto arraySizes = _cudaSimulation->getArraySizes();
+    DataAccessTO dataTO =
+        _dataTOCache->getDataTO({arraySizes.cellArraySize, arraySizes.particleArraySize, arraySizes.tokenArraySize});
+    _cudaSimulation->getInspectedSimulationData(entityIds, dataTO);
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+
+    auto result = converter.convertAccessTOtoDataDescription(dataTO, DataConverter::SortTokens::Yes);
     _dataTOCache->releaseDataTO(dataTO);
 
     return result;
@@ -207,48 +202,138 @@ OverallStatistics EngineWorker::getMonitorData() const
     return result;
 }
 
-void EngineWorker::setSimulationData(DataChangeDescription const& dataToUpdate)
+namespace
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
-    int numCells = 0;
-    int numParticles = 0;
-    int numTokens = 0;
-    for (auto const& cell : dataToUpdate.cells) {
-        if (cell.isAdded()) {
-            ++numCells;
-            if (cell->tokens.getOptionalValue()) {
-                numTokens += toInt(cell->tokens.getValue().size());
+    struct NumberOfEntities
+    {
+        int cells = 0;
+        int particles = 0;
+        int tokens = 0;
+    };
+    NumberOfEntities getNumberOfEntities(ClusteredDataDescription const& data)
+    {
+        NumberOfEntities result;
+        for (auto const& cluster : data.clusters) {
+            result.cells += cluster.cells.size();
+            for (auto const& cell : cluster.cells) {
+                result.tokens += cell.tokens.size();
             }
         }
+        result.particles = data.particles.size();
+        return result;
     }
-    for (auto const& particle : dataToUpdate.particles) {
-        if (particle.isAdded()) {
-            ++numParticles;
+    NumberOfEntities getNumberOfEntities(DataDescription const& data)
+    {
+        NumberOfEntities result;
+        result.cells = data.cells.size();
+        for (auto const& cell : data.cells) {
+            result.tokens += cell.tokens.size();
         }
+        result.particles = data.particles.size();
+        return result;
     }
-    _cudaSimulation->resizeArraysIfNecessary({numCells, numParticles, numTokens});
+}
 
-    auto arraySizes = _cudaSimulation->getArraySizes();
-    DataAccessTO dataTO = _dataTOCache->getDataTO(
-        {arraySizes.cellArraySize, arraySizes.particleArraySize, arraySizes.tokenArraySize});
-    int2 worldSize{_settings.generalSettings.worldSizeX, _settings.generalSettings.worldSizeY};
+void EngineWorker::addAndSelectSimulationData(DataDescription const& dataToUpdate)
+{
+    auto numberOfEntities = getNumberOfEntities(dataToUpdate);
+
+    EngineWorkerGuard access(this);
+
+    _cudaSimulation->resizeArraysIfNecessary(
+        {numberOfEntities.cells, numberOfEntities.particles, numberOfEntities.tokens});
+
+    DataAccessTO dataTO = provideTO();
 
     DataConverter converter(_settings.simulationParameters, _gpuConstants);
     converter.convertDataDescriptionToAccessTO(dataTO, dataToUpdate);
 
+    _cudaSimulation->addAndSelectSimulationData(dataTO);
+    updateMonitorDataIntern();
+
     _dataTOCache->releaseDataTO(dataTO);
+}
+
+void EngineWorker::setClusteredSimulationData(ClusteredDataDescription const& dataToUpdate)
+{
+    auto numberOfEntities = getNumberOfEntities(dataToUpdate);
+
+    EngineWorkerGuard access(this);
+
+    _cudaSimulation->resizeArraysIfNecessary(
+        {numberOfEntities.cells, numberOfEntities.particles, numberOfEntities.tokens});
+
+    DataAccessTO dataTO = provideTO();
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+    converter.convertClusteredDataDescriptionToAccessTO(dataTO, dataToUpdate);
 
     _cudaSimulation->setSimulationData(dataTO);
     updateMonitorDataIntern();
+
+    _dataTOCache->releaseDataTO(dataTO);
+}
+
+void EngineWorker::setSimulationData(DataDescription const& dataToUpdate)
+{
+    auto numberOfEntities = getNumberOfEntities(dataToUpdate);
+
+    EngineWorkerGuard access(this);
+
+    _cudaSimulation->resizeArraysIfNecessary({numberOfEntities.cells, numberOfEntities.particles, numberOfEntities.tokens});
+
+    DataAccessTO dataTO = provideTO();
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+    converter.convertDataDescriptionToAccessTO(dataTO, dataToUpdate);
+
+    _cudaSimulation->setSimulationData(dataTO);
+    updateMonitorDataIntern();
+
+    _dataTOCache->releaseDataTO(dataTO);
+}
+
+void EngineWorker::removeSelectedEntities(bool includeClusters)
+{
+    EngineWorkerGuard access(this);
+
+    _cudaSimulation->removeSelectedEntities(includeClusters);
+    updateMonitorDataIntern();
+}
+
+void EngineWorker::changeCell(CellDescription const& changedCell)
+{
+    EngineWorkerGuard access(this);
+
+    auto dataTO = provideTO();
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+    converter.convertCellDescriptionToAccessTO(dataTO, changedCell);
+
+    _cudaSimulation->changeInspectedSimulationData(dataTO);
+
+    _dataTOCache->releaseDataTO(dataTO);
+}
+
+void EngineWorker::changeParticle(ParticleDescription const& changedParticle)
+{
+    EngineWorkerGuard access(this);
+
+    auto dataTO = provideTO();
+
+    DataConverter converter(_settings.simulationParameters, _gpuConstants);
+    converter.convertParticleDescriptionToAccessTO(dataTO, changedParticle);
+
+    _cudaSimulation->changeInspectedSimulationData(dataTO);
+
+    _dataTOCache->releaseDataTO(dataTO);
 }
 
 void EngineWorker::calcSingleTimestep()
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
+    EngineWorkerGuard access(this);
 
-    _cudaSimulation->calcCudaTimestep();
+    _cudaSimulation->calcTimestep();
     updateMonitorDataIntern();
 }
 
@@ -290,8 +375,7 @@ uint64_t EngineWorker::getCurrentTimestep() const
 
 void EngineWorker::setCurrentTimestep(uint64_t value)
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
+    EngineWorkerGuard access(this);
     _cudaSimulation->setCurrentTimestep(value);
 }
 
@@ -346,44 +430,63 @@ void EngineWorker::applyForce_async(
 
 void EngineWorker::switchSelection(RealVector2D const& pos, float radius)
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
-    _cudaSimulation->switchSelection(SwitchSelectionData{{pos.x, pos.y}, radius});
+    EngineWorkerGuard access(this);
+    _cudaSimulation->switchSelection(PointSelectionData{{pos.x, pos.y}, radius});
+}
+
+void EngineWorker::swapSelection(RealVector2D const& pos, float radius)
+{
+    EngineWorkerGuard access(this);
+    _cudaSimulation->swapSelection(PointSelectionData{{pos.x, pos.y}, radius});
 }
 
 SelectionShallowData EngineWorker::getSelectionShallowData()
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
+    EngineWorkerGuard access(this);
     return _cudaSimulation->getSelectionShallowData();
 }
 
 void EngineWorker::setSelection(RealVector2D const& startPos, RealVector2D const& endPos)
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
-    _cudaSimulation->setSelection(SetSelectionData{{startPos.x, startPos.y}, {endPos.x, endPos.y}});
-}
-
-void EngineWorker::shallowUpdateSelection(ShallowUpdateSelectionData const& updateData)
-{
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
-    _cudaSimulation->shallowUpdateSelection(updateData);
+    EngineWorkerGuard access(this);
+    _cudaSimulation->setSelection(AreaSelectionData{{startPos.x, startPos.y}, {endPos.x, endPos.y}});
 }
 
 void EngineWorker::removeSelection()
 {
-    CudaAccess access(
-        _conditionForAccess, _conditionForWorkerLoop, _requireAccess, _isSimulationRunning, _exceptionData);
+    EngineWorkerGuard access(this);
     _cudaSimulation->removeSelection();
+}
+
+void EngineWorker::updateSelection()
+{
+    EngineWorkerGuard access(this);
+    _cudaSimulation->updateSelection();
+}
+
+void EngineWorker::shallowUpdateSelectedEntities(ShallowUpdateSelectionData const& updateData)
+{
+    EngineWorkerGuard access(this);
+    _cudaSimulation->shallowUpdateSelectedEntities(updateData);
+}
+
+void EngineWorker::colorSelectedEntities(unsigned char color, bool includeClusters)
+{
+    EngineWorkerGuard access(this);
+    _cudaSimulation->colorSelectedEntities(color, includeClusters);
+}
+
+void EngineWorker::reconnectSelectedEntities()
+{
+    EngineWorkerGuard access(this);
+    _cudaSimulation->reconnectSelectedEntities();
 }
 
 void EngineWorker::runThreadLoop()
 {
     try {
         std::unique_lock<std::mutex> uniqueLock(_mutexForLoop);
-        boost::optional<std::chrono::steady_clock::time_point> startTimestepTime;
+        std::optional<std::chrono::steady_clock::time_point> startTimestepTime;
         while (true) {
             if (!_isSimulationRunning.load()) {
 
@@ -431,7 +534,7 @@ void EngineWorker::runThreadLoop()
                 }
 
                 startTimestepTime = std::chrono::steady_clock::now();
-                _cudaSimulation->calcCudaTimestep();
+                _cudaSimulation->calcTimestep();
                 updateMonitorDataIntern();
                 ++_timestepsSinceTimepoint;
             }
@@ -460,6 +563,12 @@ bool EngineWorker::isSimulationRunning() const
     return _isSimulationRunning.load();
 }
 
+DataAccessTO EngineWorker::provideTO()
+{
+    auto arraySizes = _cudaSimulation->getArraySizes();
+    return _dataTOCache->getDataTO({arraySizes.cellArraySize, arraySizes.particleArraySize, arraySizes.tokenArraySize});
+}
+
 void EngineWorker::updateMonitorDataIntern()
 {
     auto now = std::chrono::steady_clock::now();
@@ -485,19 +594,19 @@ void EngineWorker::processJobs()
     std::unique_lock<std::mutex> asyncJobsLock(_mutexForAsyncJobs);
     if (_updateSimulationParametersJob) {
         _cudaSimulation->setSimulationParameters(*_updateSimulationParametersJob);
-        _updateSimulationParametersJob = boost::none;
+        _updateSimulationParametersJob = std::nullopt;
     }
     if (_updateSimulationParametersSpotsJob) {
         _cudaSimulation->setSimulationParametersSpots(*_updateSimulationParametersSpotsJob);
-        _updateSimulationParametersSpotsJob = boost::none;
+        _updateSimulationParametersSpotsJob = std::nullopt;
     }
     if (_updateGpuSettingsJob) {
         _cudaSimulation->setGpuConstants(*_updateGpuSettingsJob);
-        _updateGpuSettingsJob = boost::none;
+        _updateGpuSettingsJob = std::nullopt;
     }
     if (_flowFieldSettings) {
         _cudaSimulation->setFlowFieldSettings(*_flowFieldSettings);
-        _flowFieldSettings = boost::none;
+        _flowFieldSettings = std::nullopt;
     }
     if (!_applyForceJobs.empty()) {
         for (auto const& applyForceJob : _applyForceJobs) {
@@ -509,5 +618,48 @@ void EngineWorker::processJobs()
                  false});
         }
         _applyForceJobs.clear();
+    }
+}
+
+EngineWorkerGuard::EngineWorkerGuard(EngineWorker* worker, std::optional<std::chrono::milliseconds> const& maxDuration)
+    : _accessFlag(worker->_requireAccess)
+    , _conditionForWorkerLoop(worker->_conditionForWorkerLoop)
+{
+    if (!worker->_isSimulationRunning.load()) {
+        return;
+    }
+    std::mutex mutex;
+    _accessFlag.store(true);
+    std::unique_lock<std::mutex> uniqueLock(mutex);
+    if (maxDuration) {
+        std::cv_status status = worker->_conditionForAccess.wait_for(uniqueLock, *maxDuration);
+        _isTimeout = std::cv_status::timeout == status;
+        checkForException(worker->_exceptionData);
+    } else {
+        std::cv_status status = worker->_conditionForAccess.wait_for(uniqueLock, std::chrono::milliseconds(5000));
+        if (std::cv_status::timeout == status) {
+            checkForException(worker->_exceptionData);
+            throw std::runtime_error("GPU Timeout");
+        }
+    }
+    worker->_conditionForWorkerLoop.notify_all();
+}
+
+EngineWorkerGuard::~EngineWorkerGuard()
+{
+    _accessFlag.store(false);
+    _conditionForWorkerLoop.notify_all();
+}
+
+bool EngineWorkerGuard::isTimeout() const
+{
+    return _isTimeout;
+}
+
+void EngineWorkerGuard::checkForException(ExceptionData const& exceptionData)
+{
+    std::unique_lock<std::mutex> uniqueLock(exceptionData.mutex);
+    if (exceptionData.errorMessage) {
+        throw std::runtime_error(*exceptionData.errorMessage);
     }
 }

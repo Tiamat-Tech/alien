@@ -8,33 +8,32 @@
 #include "Map.cuh"
 #include "Physics.cuh"
 #include "EnergyGuidance.cuh"
-#include "CellComputerFunction.cuh"
-#include "ConstructorFunction.cuh"
-#include "ScannerFunction.cuh"
-#include "WeaponFunction.cuh"
-#include "PropulsionFunction.cuh"
-#include "MuscleFunction.cuh"
+#include "CellComputationProcessor.cuh"
+#include "ConstructionProcessor.cuh"
+#include "ScannerProcessor.cuh"
+#include "DigestionProcessor.cuh"
+#include "CommunicationProcessor.cuh"
+#include "MuscleProcessor.cuh"
+#include "SensorProcessor.cuh"
 
 class TokenProcessor
 {
 public:
-    __inline__ __device__ void movement(
-        SimulationData& data,
-        int numTokenPointers);  //prerequisite: clearTag, need numTokenPointers because it might be changed
+    __inline__ __device__ void movement(SimulationData& data);  //prerequisite: cell tags = 0
 
-    __inline__ __device__ void executeReadonlyCellFunctions(SimulationData& data, SimulationResult& result);
-    __inline__ __device__ void
-    executeModifyingCellFunctions(SimulationData& data, SimulationResult& result, int numTokenPointers);
+    __inline__ __device__ void executeReadonlyCellFunctions(SimulationData& data, SimulationResult& result);  //energy values are allowed to change
+    __inline__ __device__ void executeModifyingCellFunctions(SimulationData& data, SimulationResult& result);
+    __inline__ __device__ void deleteTokenIfCellDeleted(SimulationData& data);
 };
 
 /************************************************************************/
 /* Implementation                                                       */
 /************************************************************************/
 
-__inline__ __device__ void TokenProcessor::movement(SimulationData& data, int numTokenPointers)
+__inline__ __device__ void TokenProcessor::movement(SimulationData& data)
 {
     auto& tokens = data.entities.tokenPointers;
-    auto partition = calcPartition(numTokenPointers, threadIdx.x + blockIdx.x * blockDim.x, blockDim.x * gridDim.x);
+    auto const partition = calcAllThreadsPartition(tokens.getNumOrigEntries());
 
     for (int index = partition.startIndex; index <= partition.endIndex; ++index) {
         auto& token = tokens.at(index);
@@ -69,7 +68,7 @@ __inline__ __device__ void TokenProcessor::movement(SimulationData& data, int nu
                     continue;
                 }
 
-                token->memory[Enums::Branching::TOKEN_BRANCH_NUMBER] = connectedCell->branchNumber;
+                token->memory[Enums::Branching_TokenBranchNumber] = connectedCell->branchNumber;
                 if (0 == numMovedTokens) {
                     token->sourceCell = token->cell;
                     token->cell = connectedCell;
@@ -109,11 +108,14 @@ __inline__ __device__ void TokenProcessor::executeReadonlyCellFunctions(Simulati
         if (token) {
             auto cellFunctionType = cell->getCellFunctionType();
             if (cell->tryLock()) {
-                if (Enums::CellFunction::SCANNER == cellFunctionType) {
-                    ScannerFunction::processing(token, data);
+                if (Enums::CellFunction_Scanner == cellFunctionType) {
+                    ScannerProcessor::process(token, data);
                 }
-                if (Enums::CellFunction::WEAPON == cellFunctionType) {
-                    WeaponFunction::processing(token, data, result);
+                if (Enums::CellFunction_Digestion == cellFunctionType) {
+                    DigestionProcessor::process(token, data, result);
+                }
+                if (Enums::CellFunction_Sensor == cellFunctionType) {
+                    SensorProcessor::scheduleOperation(token, data);
                 }
                 cell->releaseLock();
             }
@@ -122,10 +124,10 @@ __inline__ __device__ void TokenProcessor::executeReadonlyCellFunctions(Simulati
 }
 
 __inline__ __device__ void
-TokenProcessor::executeModifyingCellFunctions(SimulationData& data, SimulationResult& result, int numTokenPointers)
+TokenProcessor::executeModifyingCellFunctions(SimulationData& data, SimulationResult& result)
 {
     auto& tokens = data.entities.tokenPointers;
-    auto partition = calcPartition(numTokenPointers, threadIdx.x + blockIdx.x * blockDim.x, blockDim.x * gridDim.x);
+    auto const partition = calcAllThreadsPartition(tokens.getNumOrigEntries());
 
     for (int index = partition.startIndex; index <= partition.endIndex; ++index) {
         auto& token = tokens.at(index);
@@ -141,23 +143,43 @@ TokenProcessor::executeModifyingCellFunctions(SimulationData& data, SimulationRe
                 if (cell->tryLock()) {
 
                     EnergyGuidance::processing(data, token);
-                    if (Enums::CellFunction::COMPUTER == cellFunctionType) {
-                        CellComputerFunction::processing(token);
+                    if (Enums::CellFunction_Computation== cellFunctionType) {
+                        CellComputationProcessor::process(token);
                     }
-                    if (Enums::CellFunction::CONSTRUCTOR == cellFunctionType) {
-                        ConstructorFunction::processing(token, data, result);
+                    if (Enums::CellFunction_Constructor == cellFunctionType) {
+                        ConstructionProcessor::process(token, data, result);
                     }
-                    if (Enums::CellFunction::PROPULSION == cellFunctionType) {
-                        PropulsionFunction::processing(token, data);
+                    if (Enums::CellFunction_Communication == cellFunctionType) {
+                        CommunicationProcessor::process(token, data);
                     }
-                    if (Enums::CellFunction::MUSCLE == cellFunctionType) {
-                        MuscleFunction::processing(token, data, result);
+                    if (Enums::CellFunction_Muscle == cellFunctionType) {
+                        MuscleProcessor::process(token, data, result);
                     }
 
                     //                    success = true;
                     cell->releaseLock();
                 }
 /*            } while (!success);*/
+        }
+    }
+}
+
+__inline__ __device__ void TokenProcessor::deleteTokenIfCellDeleted(SimulationData& data)
+{
+    auto& tokens = data.entities.tokenPointers;
+    auto partition =
+        calcPartition(tokens.getNumEntries(), threadIdx.x + blockIdx.x * blockDim.x, blockDim.x * gridDim.x);
+
+    for (int index = partition.startIndex; index <= partition.endIndex; ++index) {
+        if (auto& token = tokens.at(index)) {
+            auto& cell = token->cell;
+            if (cell->isDeleted()) {
+                EntityFactory factory;
+                factory.init(&data);
+                factory.createParticle(token->energy, cell->absPos, cell->vel, {cell->metadata.color});
+
+                token = nullptr;
+            }
         }
     }
 }

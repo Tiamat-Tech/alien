@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EngineImpl/Definitions.h"
+#include "EngineInterface/Definitions.h"
 #include "Definitions.h"
 
 class _DisplaySettingsDialog
@@ -19,6 +19,7 @@ private:
     std::vector<std::string> createVideoModeStrings() const;
 
     WindowController _windowController;
+
     bool _show = false;
     std::string _origMode;
     int _origSelectionIndex;

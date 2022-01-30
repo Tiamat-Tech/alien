@@ -1,24 +1,19 @@
 #pragma once
 
-#include "EngineImpl/Definitions.h"
+#include "EngineInterface/Definitions.h"
 
 #include "Definitions.h"
+#include "AlienWindow.h"
 
-class _GettingStartedWindow
+class _GettingStartedWindow : public _AlienWindow
 {
 public:
-    _GettingStartedWindow(StyleRepository const& styleRepository);
+    _GettingStartedWindow();
 
-    ~_GettingStartedWindow();
-
-    void process();
-
-    bool isOn() const;
-    void setOn(bool value);
+    virtual ~_GettingStartedWindow();
 
 private:
-    StyleRepository _styleRepository;
+    void processIntern() override;
 
-    bool _on = false;
     bool _showAfterStartup = true;
 };

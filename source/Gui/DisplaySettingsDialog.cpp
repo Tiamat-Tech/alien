@@ -3,18 +3,18 @@
 #include <sstream>
 
 #include <GLFW/glfw3.h>
-#include "imgui.h"
+#include <imgui.h>
 
 #include "Base/LoggingService.h"
-#include "Base/ServiceLocator.h"
 
 #include "AlienImGui.h"
 #include "GlobalSettings.h"
 #include "WindowController.h"
+#include "StyleRepository.h"
 
 namespace
 {
-    auto const ItemTextWidth = 130.0f;
+    auto const MaxContentTextWidth = 130.0f;
 }
 
 _DisplaySettingsDialog::_DisplaySettingsDialog(WindowController const& windowController)
@@ -37,10 +37,9 @@ void _DisplaySettingsDialog::process()
 
     ImGui::OpenPopup("Display settings");
     if (ImGui::BeginPopupModal("Display settings", NULL, ImGuiWindowFlags_None)) {
-
         auto isFullscreen = !_windowController->isWindowedMode();
 
-        if(ImGui::Checkbox("Full screen", &isFullscreen)) {
+        if(AlienImGui::ToggleButton("Full screen", isFullscreen)) {
             if (isFullscreen) {
                 setFullscreen(_selectionIndex);
             } else {
@@ -52,12 +51,12 @@ void _DisplaySettingsDialog::process()
         ImGui::BeginDisabled(!isFullscreen);
 
         if (AlienImGui::Combo(
-            AlienImGui::ComboParameters()
-                .name("Resolution")
-                .textWidth(ItemTextWidth)
-                .defaultValue(_origSelectionIndex)
-                .values(_videoModeStrings),
-            _selectionIndex)) {
+                AlienImGui::ComboParameters()
+                    .name("Resolution")
+                    .textWidth(MaxContentTextWidth)
+                    .defaultValue(_origSelectionIndex)
+                    .values(_videoModeStrings),
+                _selectionIndex)) {
 
             setFullscreen(_selectionIndex);
         }
@@ -65,14 +64,14 @@ void _DisplaySettingsDialog::process()
 
         AlienImGui::Separator();
 
-        if (ImGui::Button("OK")) {
+        if (AlienImGui::Button("OK")) {
             ImGui::CloseCurrentPopup();
             _show = false;
         }
         ImGui::SetItemDefaultFocus();
 
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
+        if (AlienImGui::Button("Cancel")) {
             ImGui::CloseCurrentPopup();
             _show = false;
             _windowController->setMode(_origMode);

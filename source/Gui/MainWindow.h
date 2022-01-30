@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EngineImpl/Definitions.h"
+#include "EngineInterface/Definitions.h"
 #include "Definitions.h"
 
 class _MainWindow
@@ -42,7 +42,7 @@ private:
     SpatialControlWindow _spatialControlWindow;
     SimulationParametersWindow _simulationParametersWindow;
     StatisticsWindow _statisticsWindow;
-    ModeWindow _modeWindow;
+    ModeController _modeController;
     GpuSettingsDialog _gpuSettingsDialog;
     Viewport _viewport;
     StartupWindow _startupWindow;
@@ -58,8 +58,6 @@ private:
     SaveSimulationDialog _saveSimulationDialog; 
     DisplaySettingsDialog _displaySettingsDialog;
     EditorController _editorController; 
-
-    StyleRepository _styleRepository;
 
     bool _onClose = false;
     bool _simulationMenuToggled = false;

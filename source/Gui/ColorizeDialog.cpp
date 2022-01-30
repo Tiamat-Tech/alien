@@ -1,13 +1,14 @@
 #include "ColorizeDialog.h"
 
-#include "imgui.h"
+#include <imgui.h>
 
 #include "Base/Definitions.h"
 #include "EngineInterface/Colors.h"
-#include "EngineInterface/ChangeDescriptions.h"
 #include "EngineInterface/Descriptions.h"
 #include "EngineInterface/DescriptionHelper.h"
-#include "EngineImpl/SimulationController.h"
+#include "EngineInterface/SimulationController.h"
+
+#include "AlienImGui.h"
 
 _ColorizeDialog::_ColorizeDialog(SimulationController const& simController)
     : _simController(simController)
@@ -25,19 +26,19 @@ void _ColorizeDialog::process()
 
         ImGui::Text("Select color(s):");
 
-        checkbox("##color1", Const::IndividualCellColor1, _checkColors[0]);
+        colorCheckbox("##color1", Const::IndividualCellColor1, _checkColors[0]);
         ImGui::SameLine();
-        checkbox("##color2", Const::IndividualCellColor2, _checkColors[1]);
+        colorCheckbox("##color2", Const::IndividualCellColor2, _checkColors[1]);
         ImGui::SameLine();
-        checkbox("##color3", Const::IndividualCellColor3, _checkColors[2]);
+        colorCheckbox("##color3", Const::IndividualCellColor3, _checkColors[2]);
         ImGui::SameLine();
-        checkbox("##color4", Const::IndividualCellColor4, _checkColors[3]);
+        colorCheckbox("##color4", Const::IndividualCellColor4, _checkColors[3]);
         ImGui::SameLine();
-        checkbox("##color5", Const::IndividualCellColor5, _checkColors[4]);
+        colorCheckbox("##color5", Const::IndividualCellColor5, _checkColors[4]);
         ImGui::SameLine();
-        checkbox("##color6", Const::IndividualCellColor6, _checkColors[5]);
+        colorCheckbox("##color6", Const::IndividualCellColor6, _checkColors[5]);
         ImGui::SameLine();
-        checkbox("##color7", Const::IndividualCellColor7, _checkColors[6]);
+        colorCheckbox("##color7", Const::IndividualCellColor7, _checkColors[6]);
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -50,7 +51,7 @@ void _ColorizeDialog::process()
             anySelected |= checkColor;
         }
         ImGui::BeginDisabled(!anySelected);
-        if (ImGui::Button("OK")) {
+        if (AlienImGui::Button("OK")) {
             onColorize();
             ImGui::CloseCurrentPopup();
             _show = false;
@@ -59,7 +60,7 @@ void _ColorizeDialog::process()
 
         ImGui::SameLine();
         ImGui::SetItemDefaultFocus();
-        if (ImGui::Button("Cancel")) {
+        if (AlienImGui::Button("Cancel")) {
             ImGui::CloseCurrentPopup();
             _show = false;
         }
@@ -73,16 +74,10 @@ void _ColorizeDialog::show()
     _show = true;
 }
 
-void _ColorizeDialog::checkbox(std::string id, uint64_t cellColor, bool& check)
+void _ColorizeDialog::colorCheckbox(std::string id, uint32_t cellColor, bool& check)
 {
     float h, s, v;
-    ImGui::ColorConvertRGBtoHSV(
-        toFloat((cellColor >> 16) & 0xff) / 255,
-        toFloat((cellColor >> 8) & 0xff) / 255,
-        toFloat((cellColor & 0xff)) / 255,
-        h,
-        s,
-        v);
+    AlienImGui::convertRGBtoHSV(cellColor, h, s, v);
     ImGui::PushStyleColor(ImGuiCol_FrameBg, (ImVec4)ImColor::HSV(h, s * 0.6f, v * 0.3f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, (ImVec4)ImColor::HSV(h, s * 0.7f, v * 0.5f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, (ImVec4)ImColor::HSV(h, s * 0.8f, v * 0.8f));
@@ -96,7 +91,7 @@ void _ColorizeDialog::onColorize()
     auto timestep = static_cast<uint32_t>(_simController->getCurrentTimestep());
     auto settings = _simController->getSettings();
     auto symbolMap = _simController->getSymbolMap();
-    auto content = _simController->getSimulationData({0, 0}, _simController->getWorldSize());
+    auto content = _simController->getClusteredSimulationData({0, 0}, _simController->getWorldSize());
 
     std::vector<int> colorCodes;
     for (int i = 0; i < 7; ++i) {
@@ -108,5 +103,5 @@ void _ColorizeDialog::onColorize()
 
     _simController->closeSimulation();
     _simController->newSimulation(timestep, settings, symbolMap);
-    _simController->setSimulationData(content);
+    _simController->setClusteredSimulationData(content);
 }

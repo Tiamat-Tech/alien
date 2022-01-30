@@ -1,23 +1,18 @@
 #pragma once
 
 #include "Definitions.h"
+#include "AlienWindow.h"
 
-class _LogWindow
+class _LogWindow : public _AlienWindow
 {
 public:
-    _LogWindow(StyleRepository const& styleRepository, SimpleLogger const& logger);
+    _LogWindow(SimpleLogger const& logger);
     ~_LogWindow();
 
-    void process();
-
-
-    bool isOn() const;
-    void setOn(bool value);
-
 private:
-    bool _on = false;
+    void processIntern();
+
     bool _verbose = false;
 
-    StyleRepository _styleRepository;
     SimpleLogger _logger;
 };

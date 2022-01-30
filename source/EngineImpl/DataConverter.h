@@ -2,7 +2,7 @@
 
 #include "EngineInterface/Definitions.h"
 #include "EngineInterface/Descriptions.h"
-#include "EngineInterface/ChangeDescriptions.h"
+#include "EngineInterface/GpuSettings.h"
 #include "EngineInterface/OverlayDescriptions.h"
 #include "EngineInterface/SimulationParameters.h"
 #include "EngineGpuKernels/AccessTOs.cuh"
@@ -15,9 +15,15 @@ class DataConverter
 public:
     DataConverter(SimulationParameters const& parameters, GpuSettings const& gpuConstants);
 
-    DataDescription convertAccessTOtoDataDescription(DataAccessTO const& dataTO);
-    OverlayDescription convertAccessTOtoOverlayDescription(DataAccessTO const& dataTO);
-    void convertDataDescriptionToAccessTO(DataAccessTO& result, DataChangeDescription const& description);
+    enum class SortTokens {No, Yes};
+    ClusteredDataDescription convertAccessTOtoClusteredDataDescription(DataAccessTO const& dataTO, SortTokens sortTokens = SortTokens::No)
+        const;
+    DataDescription convertAccessTOtoDataDescription(DataAccessTO const& dataTO, SortTokens sortTokens = SortTokens::No) const;
+    OverlayDescription convertAccessTOtoOverlayDescription(DataAccessTO const& dataTO) const;
+    void convertClusteredDataDescriptionToAccessTO(DataAccessTO& result, ClusteredDataDescription const& description) const;
+    void convertDataDescriptionToAccessTO(DataAccessTO& result, DataDescription const& description) const;
+    void convertCellDescriptionToAccessTO(DataAccessTO& result, CellDescription const& cell) const;
+    void convertParticleDescriptionToAccessTO(DataAccessTO& result, ParticleDescription const& particle) const;
 
 private:
 	struct CreateClusterReturnData
@@ -32,17 +38,13 @@ private:
     CellDescription createCellDescription(DataAccessTO const& dataTO, int cellIndex) const;
 
 	void addCell(
-        DataAccessTO const& dataTO,
-        CellChangeDescription const& cellToAdd,
-        unordered_map<uint64_t, int>& cellIndexTOByIds);
-    void addParticle(DataAccessTO const& dataTO, ParticleDescription const& particleDesc);
+        DataAccessTO const& dataTO, CellDescription const& cellToAdd, std::unordered_map<uint64_t, int>& cellIndexTOByIds) const;
+    void addParticle(DataAccessTO const& dataTO, ParticleDescription const& particleDesc) const;
 
 	void setConnections(
-        DataAccessTO const& dataTO,
-        CellChangeDescription const& cellToAdd,
-        unordered_map<uint64_t, int> const& cellIndexByIds);
+        DataAccessTO const& dataTO, CellDescription const& cellToAdd, std::unordered_map<uint64_t, int> const& cellIndexByIds) const;
 
-    int convertStringAndReturnStringIndex(DataAccessTO const& dataTO, std::string const& s);
+    int convertStringAndReturnStringIndex(DataAccessTO const& dataTO, std::string const& s) const;
 
 private:
 	SimulationParameters _parameters;

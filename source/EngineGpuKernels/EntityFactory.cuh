@@ -4,7 +4,7 @@
 #include "AccessTOs.cuh"
 #include "Map.cuh"
 #include "Math.cuh"
-#include "EngineInterface/ElementaryTypes.h"
+#include "EngineInterface/Enums.h"
 #include "Particle.cuh"
 #include "Physics.cuh"
 #include "SimulationData.cuh"
@@ -16,22 +16,12 @@ class EntityFactory
 {
 public:
     __inline__ __device__ void init(SimulationData* data);
-    __inline__ __device__ Particle*
-    createParticleFromTO(int targetIndex, ParticleAccessTO const& particleTO, Particle* particleTargetArray);
-    __inline__ __device__ Cell*
-    createCellFromTO(int targetIndex, CellAccessTO const& cellTO, Cell* cellArray, DataAccessTO* simulationTO);
-    __inline__ __device__ Token* createTokenFromTO(
-        int targetIndex,
-        TokenAccessTO const& tokenTO,
-        Cell* cellArray,
-        Token* tokenArray,
-        DataAccessTO* simulationTO);
-    __inline__ __device__ Particle*
-    createParticle(
-        float energy,
-        float2 const& pos,
-        float2 const& vel,
-        ParticleMetadata const& metadata);
+    __inline__ __device__ Particle* createParticleFromTO(ParticleAccessTO const& particleTO, bool createIds);
+    __inline__ __device__ Cell* createCellFromTO(int targetIndex, CellAccessTO const& cellTO, Cell* cellArray, DataAccessTO* simulationTO, bool createIds);
+    __inline__ __device__ void changeCellFromTO(CellAccessTO const& cellTO, DataAccessTO const& dataTO, Cell* cell);
+    __inline__ __device__ Token* createTokenFromTO(TokenAccessTO const& tokenTO, Cell* cellArray);
+    __inline__ __device__ void changeParticleFromTO(ParticleAccessTO const& particleTO, Particle* particle);
+    __inline__ __device__ Particle* createParticle(float energy, float2 const& pos, float2 const& vel, ParticleMetadata const& metadata);
     __inline__ __device__ Cell* createRandomCell(float energy, float2 const& pos, float2 const& vel);
     __inline__ __device__ Cell* createCell();
     __inline__ __device__ Token* duplicateToken(Cell* targetCell, Token* sourceToken);
@@ -52,17 +42,16 @@ private:
 __inline__ __device__ void EntityFactory::init(SimulationData* data)
 {
     _data = data;
-    _map.init(data->size);
+    _map.init(data->worldSize);
 }
 
-__inline__ __device__ Particle*
-EntityFactory::createParticleFromTO(int targetIndex, ParticleAccessTO const& particleTO, Particle* particleTargetArray)
+__inline__ __device__ Particle* EntityFactory::createParticleFromTO(ParticleAccessTO const& particleTO, bool createIds)
 {
     Particle** particlePointer = _data->entities.particlePointers.getNewElement();
-    Particle* particle = particleTargetArray + targetIndex;
+    Particle* particle = _data->entities.particles.getNewElement();
     *particlePointer = particle;
     
-    particle->id = _data->numberGen.createNewId_kernel();
+    particle->id = createIds ? _data->numberGen.createNewId_kernel() : particleTO.id;
     particle->absPos = particleTO.pos;
     _map.mapPosCorrection(particle->absPos);
     particle->vel = particleTO.vel;
@@ -74,13 +63,13 @@ EntityFactory::createParticleFromTO(int targetIndex, ParticleAccessTO const& par
 }
 
 __inline__ __device__ Cell*
-EntityFactory::createCellFromTO(int targetIndex, CellAccessTO const& cellTO, Cell* cellTargetArray, DataAccessTO* simulationTO)
+EntityFactory::createCellFromTO(int targetIndex, CellAccessTO const& cellTO, Cell* cellTargetArray, DataAccessTO* simulationTO, bool createIds)
 {
     Cell** cellPointer = _data->entities.cellPointers.getNewElement();
     Cell* cell = cellTargetArray + targetIndex;
     *cellPointer = cell;
 
-    cell->id = _data->numberGen.createNewId_kernel();
+    cell->id = createIds ? _data->numberGen.createNewId_kernel() : cellTO.id;
     cell->absPos = cellTO.pos;
     _map.mapPosCorrection(cell->absPos);
     cell->vel = cellTO.vel;
@@ -98,11 +87,11 @@ EntityFactory::createCellFromTO(int targetIndex, CellAccessTO const& cellTO, Cel
     cell->cellFunctionType = cellTO.cellFunctionType;
 
     switch (cell->cellFunctionType) {
-    case Enums::CellFunction::COMPUTER: {
+    case Enums::CellFunction_Computation: {
         cell->numStaticBytes = cellTO.numStaticBytes;
         cell->numMutableBytes = cudaSimulationParameters.cellFunctionComputerCellMemorySize;
     } break;
-    case Enums::CellFunction::SENSOR: {
+    case Enums::CellFunction_Sensor: {
         cell->numStaticBytes = 0;
         cell->numMutableBytes = 5;
     } break;
@@ -148,15 +137,67 @@ EntityFactory::createCellFromTO(int targetIndex, CellAccessTO const& cellTO, Cel
     return cell;
 }
 
-__inline__ __device__ Token* EntityFactory::createTokenFromTO(
-    int targetIndex,
-    TokenAccessTO const& tokenTO,
-    Cell* cellArray,
-    Token* tokenArray,
-    DataAccessTO* simulationTO)
+__inline__ __device__ void EntityFactory::changeCellFromTO(
+    CellAccessTO const& cellTO, DataAccessTO const& dataTO, Cell* cell)
+{
+    cell->id = cellTO.id;
+    cell->absPos = cellTO.pos;
+    _map.mapPosCorrection(cell->absPos);
+    cell->vel = cellTO.vel;
+    cell->branchNumber = cellTO.branchNumber;
+    cell->tokenBlocked = cellTO.tokenBlocked;
+    cell->maxConnections = cellTO.maxConnections;
+    cell->energy = cellTO.energy;
+    cell->cellFunctionType = cellTO.cellFunctionType;
+
+    switch (cell->cellFunctionType) {
+    case Enums::CellFunction_Computation: {
+        cell->numStaticBytes = cellTO.numStaticBytes;
+        cell->numMutableBytes = cudaSimulationParameters.cellFunctionComputerCellMemorySize;
+    } break;
+    case Enums::CellFunction_Sensor: {
+        cell->numStaticBytes = 0;
+        cell->numMutableBytes = 5;
+    } break;
+    default: {
+        cell->numStaticBytes = 0;
+        cell->numMutableBytes = 0;
+    }
+    }
+    for (int i = 0; i < MAX_CELL_STATIC_BYTES; ++i) {
+        cell->staticData[i] = cellTO.staticData[i];
+    }
+    for (int i = 0; i < MAX_CELL_MUTABLE_BYTES; ++i) {
+        cell->mutableData[i] = cellTO.mutableData[i];
+    }
+    cell->metadata.color = cellTO.metadata.color;
+
+    copyString(
+        cell->metadata.nameLen,
+        cell->metadata.name,
+        cellTO.metadata.nameLen,
+        cellTO.metadata.nameStringIndex,
+        dataTO.stringBytes);
+
+    copyString(
+        cell->metadata.descriptionLen,
+        cell->metadata.description,
+        cellTO.metadata.descriptionLen,
+        cellTO.metadata.descriptionStringIndex,
+        dataTO.stringBytes);
+
+    copyString(
+        cell->metadata.sourceCodeLen,
+        cell->metadata.sourceCode,
+        cellTO.metadata.sourceCodeLen,
+        cellTO.metadata.sourceCodeStringIndex,
+        dataTO.stringBytes);
+}
+
+__inline__ __device__ Token* EntityFactory::createTokenFromTO(TokenAccessTO const& tokenTO, Cell* cellArray)
 {
     Token** tokenPointer = _data->entities.tokenPointers.getNewElement();
-    Token* token = tokenArray + targetIndex;
+    Token* token = _data->entities.tokens.getNewElement();
     *tokenPointer = token;
 
     token->energy = tokenTO.energy;
@@ -168,12 +209,19 @@ __inline__ __device__ Token* EntityFactory::createTokenFromTO(
     return token;
 }
 
+__inline__ __device__ void EntityFactory::changeParticleFromTO(ParticleAccessTO const& particleTO, Particle* particle)
+{
+    particle->energy = particleTO.energy;
+    particle->absPos = particleTO.pos;
+    particle->metadata.color = particleTO.metadata.color;
+}
+
 __inline__ __device__ void
 EntityFactory::copyString(int& targetLen, char*& targetString, int sourceLen, int sourceStringIndex, char* stringBytes)
 {
     targetLen = sourceLen;
     if (sourceLen > 0) {
-        targetString = _data->entities.strings.getArray<char>(sourceLen);
+        targetString = _data->entities.dynamicMemory.getArray<char>(sourceLen);
         for (int i = 0; i < sourceLen; ++i) {
             targetString[i] = stringBytes[sourceStringIndex + i];
         }
@@ -217,13 +265,13 @@ __inline__ __device__ Cell* EntityFactory::createRandomCell(float energy, float2
     cell->metadata.nameLen = 0;
     cell->metadata.descriptionLen = 0;
     cell->metadata.sourceCodeLen = 0;
-    cell->cellFunctionType = _data->numberGen.random(static_cast<int>(Enums::CellFunction::_COUNTER) - 1);
+    cell->cellFunctionType = _data->numberGen.random(Enums::CellFunction_Count - 1);
     switch (cell->cellFunctionType) {
-    case Enums::CellFunction::COMPUTER: {
+    case Enums::CellFunction_Computation: {
         cell->numStaticBytes = cudaSimulationParameters.cellFunctionComputerMaxInstructions * 3;
         cell->numMutableBytes = cudaSimulationParameters.cellFunctionComputerCellMemorySize;
     } break;
-    case Enums::CellFunction::SENSOR: {
+    case Enums::CellFunction_Sensor: {
         cell->numStaticBytes = 0;
         cell->numMutableBytes = 5;
     } break;

@@ -1,33 +1,45 @@
 
 add_library(alien_engine_gpu_kernels_lib
-    AccessKernels.cuh
     AccessTOs.cuh
-    ActionKernels.cuh
     Array.cuh
     Base.cuh
-    CellComputerFunction.cuh
     CellConnectionProcessor.cuh
     Cell.cuh
     CellFunctionData.cuh
     CellProcessor.cuh
-    CleanupKernels.cuh
-    CommunicatorFunction.cuh
+    CommunicationProcessor.cuh
+    CellComputationProcessor.cuh
+    ConstantMemory.cu
     ConstantMemory.cuh
-    ConstructorFunction.cuh
+    ConstructionProcessor.cuh
     CudaMemoryManager.cuh
     CudaMonitorData.cuh
-    CudaSimulation.cu
-    CudaSimulation.cuh
-    DEBUG_cluster.cuh
+    CudaSimulationAdapter.cu
+    CudaSimulationAdapter.cuh
+    DataAccessKernels.cu
+    DataAccessKernels.cuh
+    DataAccessKernelsLauncher.cu
+    DataAccessKernelsLauncher.cuh
+    DebugKernels.cu
     DebugKernels.cuh
     Definitions.cuh
     Definitions.h
-    DllExport.h
-    DynamicMemory.cuh
+    DensityMap.cuh
+    DigestionProcessor.cuh
+    EditKernels.cu
+    EditKernels.cuh
+    EditKernelsLauncher.cu
+    EditKernelsLauncher.cuh
     EnergyGuidance.cuh
+    Entities.cu
     Entities.cuh
     EntityFactory.cuh
-    FlowFieldKernel.cuh
+    FlowFieldKernels.cu
+    FlowFieldKernels.cuh
+    GarbageCollectorKernels.cu
+    GarbageCollectorKernels.cuh
+    GarbageCollectorKernelsLauncher.cu
+    GarbageCollectorKernelsLauncher.cuh
     HashMap.cuh
     HashSet.cuh
     List.cuh
@@ -35,27 +47,39 @@ add_library(alien_engine_gpu_kernels_lib
     Map.cuh
     MapSectionCollector.cuh
     Math.cuh
+    MonitorKernelsLauncher.cu
+    MonitorKernelsLauncher.cuh
+    MonitorKernels.cu
     MonitorKernels.cuh
-    MuscleFunction.cuh
-    Operation.cuh
+    MuscleProcessor.cuh
+    Operations.cuh
     Particle.cuh
     ParticleProcessor.cuh
     Physics.cuh
-    PropulsionFunction.cuh
     QuantityConverter.cuh
+    RenderingData.cu
     RenderingData.cuh
+    RenderingKernels.cu
     RenderingKernels.cuh
-    ScannerFunction.cuh
+    RenderingKernelsLauncher.cu
+    RenderingKernelsLauncher.cuh
+    ScannerProcessor.cuh
     SelectionResult.cuh
-    SensorFunction.cuh
+    SensorProcessor.cuh
+    SimulationData.cu
     SimulationData.cuh
+    SimulationKernels.cu
     SimulationKernels.cuh
+    SimulationKernelsLauncher.cu
+    SimulationKernelsLauncher.cuh
     SimulationResult.cuh
     SpotCalculator.cuh
     Swap.cuh
+    TempMemory.cuh
     Token.cuh
-    TokenProcessor.cuh
-    WeaponFunction.cuh)
+    TokenProcessor.cuh)
+
+target_link_libraries(alien_engine_gpu_kernels_lib alien_base_lib)
 
 # See https://gitlab.kitware.com/cmake/cmake/-/issues/17520
 set_property(TARGET alien_engine_gpu_kernels_lib PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
